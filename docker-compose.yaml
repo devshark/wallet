@@ -1,0 +1,83 @@
+version: "3"
+
+services:
+  app:
+    image: tx-parser-go:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    environment:
+      PORT: 8080
+      PUBLIC_NODE_URL: https://ethereum-rpc.publicnode.com/
+      JOB_SCHEDULE: 1s
+      USE_DATABASE: true
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - ${DOCKER_PUBLISH_IP:-127.0.0.1}:8080:8080
+    restart: unless-stopped
+    networks:
+      - wallet-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+    # Uncomment if other apps depend on this
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl", "--fail", "http://localhost:8080/health"]
+    #   # in case we can't install curl:
+    #   # test: ["CMD-SHELL", "nc -vz 127.0.0.1 8080 || exit 1"]
+    #   interval: 5s
+    #   timeout: 5s
+    #   retries: 5
+
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-16}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    networks:
+      - wallet-app
+    ports:
+      - ${DOCKER_PUBLISH_IP:-127.0.0.1}:5433:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - -c
+      - wal_level=logical
+
+  # TODO: can be used for http caching, or storage for latest block number
+  # redis:
+  #   image: redis:${REDIS_IMAGE_TAG:-7}
+  #   restart: ${RESTART_POLICY:-unless-stopped}
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - wallet-app
+  #   ports:
+  #     - ${DOCKER_PUBLISH_IP:-127.0.0.1}:6389:6379
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  wallet-app:
