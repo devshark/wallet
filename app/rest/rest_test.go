@@ -228,7 +228,6 @@ func TestRestHandlers(t *testing.T) {
 
 		var response api.Transaction
 		err = json.Unmarshal(rr.Body.Bytes(), &response)
-		t.Logf("Response: %#v", response)
 		require.NoError(t, err)
 		require.Equal(t, mockTxs[1].TxID, response.TxID)
 		require.Equal(t, mockTxs[1].AccountId, response.AccountId)

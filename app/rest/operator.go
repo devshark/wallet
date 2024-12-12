@@ -2,7 +2,6 @@ package rest
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -44,7 +43,6 @@ func (h *RestHandlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 		Remarks:       strings.TrimSpace(request.Remarks),
 	}
 
-	fmt.Printf("deposit request: %#v\n", payload)
 	// create double entry transaction, returns both transaction result
 	tx, err := h.repo.Transfer(ctx, payload, idempotencyKey)
 	handled := h.HandleTransferError(w, err)
@@ -52,12 +50,9 @@ func (h *RestHandlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("deposit receipts: %#v\n", tx)
-
 	// return the transaction receipt containing the relevant transfer details
 	for _, t := range tx {
 		if strings.EqualFold(string(t.Type), string(api.CREDIT)) {
-			h.logger.Printf("deposit receipt: %#v\n", *t)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(*t)
@@ -114,7 +109,6 @@ func (h *RestHandlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) 
 	// return the transaction receipt containing the relevant transfer details
 	for _, t := range tx {
 		if strings.EqualFold(string(t.Type), string(api.DEBIT)) {
-			h.logger.Printf("withdrawal receipt: %v\n", t)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(t)
