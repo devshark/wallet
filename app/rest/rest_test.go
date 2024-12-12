@@ -41,10 +41,10 @@ func (m *MockRepository) Transfer(ctx context.Context, request *api.TransferRequ
 }
 
 func TestRestHandlers(t *testing.T) {
-	mockRepo := new(MockRepository)
-	handlers := rest.NewRestHandlers(mockRepo)
-
 	t.Run("HandleHealthCheck", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		req, err := http.NewRequest("GET", "/health", nil)
 		require.NoError(t, err)
 
@@ -58,6 +58,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetAccountBalance", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		mockAccount := &api.Account{
 			AccountId: "user1",
 			Currency:  "USD",
@@ -88,6 +91,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetTransaction", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		mockTx := &api.Transaction{
 			TxID:      "tx1",
 			AccountId: "user1",
@@ -120,6 +126,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetTransactions", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		mockTxs := []*api.Transaction{
 			{TxID: "tx1", AccountId: "user1", Currency: "USD", Amount: decimal.NewFromFloat(50.00)},
 			{TxID: "tx2", AccountId: "user1", Currency: "USD", Amount: decimal.NewFromFloat(25.00)},
@@ -150,6 +159,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleWithdrawal", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		withdrawRequest := &api.WithdrawRequest{
 			FromAccountId: "user1",
 			Currency:      "USD",
@@ -187,6 +199,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleDeposit", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		depositRequest := &api.DepositRequest{
 			ToAccountId: "user1",
 			Currency:    "USD",
@@ -224,6 +239,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleTransfer", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		transferRequest := &api.TransferRequest{
 			FromAccountId: "user1",
 			ToAccountId:   "user2",
@@ -260,6 +278,9 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleTransfer - Missing Idempotency Key", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		transferRequest := &api.TransferRequest{
 			FromAccountId: "user1",
 			ToAccountId:   "user2",
@@ -279,10 +300,13 @@ func TestRestHandlers(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusBadRequest, rr.Code)
-		require.Contains(t, rr.Body.String(), "Idempotency-Key is required")
+		require.Contains(t, rr.Body.String(), "missing idempotency key")
 	})
 
 	t.Run("HandleTransfer - Invalid Request", func(t *testing.T) {
+		mockRepo := new(MockRepository)
+		handlers := rest.NewRestHandlers(mockRepo)
+
 		invalidRequest := struct {
 			InvalidField string `json:"invalid_field"`
 		}{
@@ -301,6 +325,6 @@ func TestRestHandlers(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusBadRequest, rr.Code)
-		require.Contains(t, rr.Body.String(), "Invalid request")
+		require.Contains(t, rr.Body.String(), "invalid request")
 	})
 }
