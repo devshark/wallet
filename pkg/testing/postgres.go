@@ -10,6 +10,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+/**
+ * SetupTestDB creates a postgres container and returns the connection string, and cleanup method
+ */
+
 func SetupTestDB(t *testing.T) (string, func()) {
 
 	dbName := "wallet"

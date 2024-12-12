@@ -13,17 +13,13 @@ import (
 	_ "github.com/lib/pq" // Or your database driver
 )
 
-type Operation string
-
-const (
-	OperationUp   Operation = "up"
-	OperationDown Operation = "down"
-)
+type GlobFunc func(pattern string) (matches []string, err error)
 
 type Migrator struct {
 	db            *sql.DB
 	logger        *log.Logger
 	migrationPath string
+	globFunc      GlobFunc // makes testing easier
 }
 
 func NewMigrator(db *sql.DB, migrationPath string) *Migrator {
@@ -31,6 +27,7 @@ func NewMigrator(db *sql.DB, migrationPath string) *Migrator {
 		db:            db,
 		logger:        log.Default(),
 		migrationPath: migrationPath,
+		globFunc:      filepath.Glob,
 	}
 }
 
@@ -44,7 +41,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 
 	m.createMigrationTable(ctx)
 
-	files, err := filepath.Glob(fmt.Sprintf("%s/*_up.sql", m.migrationPath))
+	files, err := m.globFunc(fmt.Sprintf("%s/*_up.sql", m.migrationPath))
 	if err != nil {
 		return err
 	}
@@ -65,41 +62,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 			continue
 		}
 
-		err = m.applyMigration(ctx, file, OperationUp)
-		if err != nil {
-			return err
-		}
-
-		m.logger.Printf("Migration applied: %s\n", filepath.Base(file))
-	}
-
-	return nil
-}
-
-func (m *Migrator) Down(ctx context.Context) error {
-	m.createMigrationTable(ctx)
-
-	files, err := filepath.Glob(fmt.Sprintf("%s/*_down.sql", m.migrationPath))
-	if err != nil {
-		return err
-	}
-
-	sort.Slice(files, func(i, j int) bool {
-		return files[i] > files[j]
-	})
-
-	for _, file := range files {
-		exists, err := m.exists(ctx, filepath.Base(file))
-		if err != nil {
-			return err
-		}
-
-		if !exists {
-			m.logger.Println("SKIP: Migration already reversed:", filepath.Base(file))
-			continue
-		}
-
-		err = m.applyMigration(ctx, file, OperationDown)
+		err = m.applyMigration(ctx, file)
 		if err != nil {
 			return err
 		}
@@ -135,7 +98,7 @@ func (m *Migrator) exists(ctx context.Context, name string) (bool, error) {
 	return count > 0, nil
 }
 
-func (m *Migrator) applyMigration(ctx context.Context, file string, operation Operation) error {
+func (m *Migrator) applyMigration(ctx context.Context, file string) error {
 	fileIO, err := os.Open(file)
 	if err != nil {
 		return err
@@ -158,18 +121,10 @@ func (m *Migrator) applyMigration(ctx context.Context, file string, operation Op
 		return err
 	}
 
-	if operation == OperationUp {
-		_, err = tx.ExecContext(ctx, "INSERT INTO migrations (name) VALUES ($1)", filepath.Base(file))
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-	} else {
-		_, err = tx.ExecContext(ctx, "DELETE FROM migrations WHERE name = $1", filepath.Base(file))
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
+	_, err = tx.ExecContext(ctx, "INSERT INTO migrations (name) VALUES ($1)", filepath.Base(file))
+	if err != nil {
+		_ = tx.Rollback()
+		return err
 	}
 
 	err = tx.Commit()

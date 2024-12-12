@@ -1,137 +1,250 @@
-package migration_test
+package migration
 
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/devshark/wallet/app/internal/migration"
-	pgTesting "github.com/devshark/wallet/pkg/testing"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/lib/pq"
 )
 
-func setupTestDB(t *testing.T) (*sql.DB, func()) {
-	if testing.Short() {
-		t.Skip("Skipping test in short mode, as it requires a database")
-	}
-
-	connectionString, cleanup := pgTesting.SetupTestDB(t)
-	// db, err := sql.Open("postgres", "user=postgres password=postgres host=localhost port=5433 dbname=postgres sslmode=disable")
-	db, err := sql.Open("postgres", connectionString)
-	// db, err := sql.Open("postgres", "postgres://user:password@localhost:5432/testdb?sslmode=disable")
-	require.NoError(t, err)
-	require.NoError(t, db.Ping())
-	return db, cleanup
-}
-
-func createMigrationFiles(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "migrations")
-	require.NoError(t, err)
-
-	t.Logf("Created temporary directory: %s", tempDir)
-
-	// Create test migration files
-	upContent := []byte("CREATE TABLE public.test_table (id SERIAL PRIMARY KEY, name TEXT);")
-	downContent := []byte("DROP TABLE IF EXISTS public.test_table;")
-
-	// os.CreateTemp("migrations", "")
-
-	err = os.WriteFile(filepath.Join(tempDir, "001_create_test_table_up.sql"), upContent, 0644)
-	require.NoError(t, err)
-
-	err = os.WriteFile(filepath.Join(tempDir, "001_create_test_table_down.sql"), downContent, 0644)
-	require.NoError(t, err)
-
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	return tempDir, cleanup
-}
-
 func TestMigrator(t *testing.T) {
-	db, _ := setupTestDB(t)
-	// defer cleanupDb()
+	// Skip if running short tests
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 
-	defer db.Close()
-
-	migrationDir, cleanup := createMigrationFiles(t)
-	defer cleanup()
-
-	// Change working directory to the migration directory
-	originalWd, _ := os.Getwd()
-
-	t.Logf("Current working directory: %s", originalWd)
-
-	err := os.Chdir(migrationDir)
-	require.NoError(t, err)
-	// defer os.Chdir(originalWd)
-	originalWd, _ = os.Getwd()
-	t.Logf("New working directory: %s", originalWd)
-	entries, err := os.ReadDir(originalWd)
-	require.NoError(t, err)
-	t.Logf("Entries: %v", entries)
-
-	ctx := context.Background()
-
-	t.Run("NewMigrator", func(t *testing.T) {
-		migrator := migration.NewMigrator(db, migrationDir)
-		assert.NotNil(t, migrator)
-	})
-
+	// Test Up migration
 	t.Run("Up", func(t *testing.T) {
-		migrator := migration.NewMigrator(db, migrationDir)
-		err := migrator.Up(ctx)
-		assert.NoError(t, err)
+		var err error
 
-		// Verify that the table was created
+		// Setup
+		db := setupTestDB(t)
+		defer db.Close()
+
+		migrationDir, cleanupMigrations := createTestMigrations(t)
+		defer cleanupMigrations()
+
+		// Change working directory to the migration directory
+		originalWd, _ := os.Getwd()
+
+		err = os.Chdir(migrationDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalWd)
+
+		// Create Migrator
+		migrator := NewMigrator(db, migrationDir)
+		require.NotNil(t, migrator)
+
+		err = migrator.Up(context.Background())
+		require.NoError(t, err)
+
+		defer cleanTestMigrations(t, db)
+
+		// Verify migration
 		var tableExists bool
 		err = db.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table')").Scan(&tableExists)
-		assert.NoError(t, err)
-		assert.True(t, tableExists)
+		require.NoError(t, err)
+		require.True(t, tableExists)
 	})
 
-	t.Run("Down", func(t *testing.T) {
-		migrator := migration.NewMigrator(db, migrationDir)
-		err := migrator.Down(ctx)
-		assert.NoError(t, err)
+	// Test idempotency of Up
+	t.Run("Up Idempotency", func(t *testing.T) {
+		var err error
 
-		// Verify that the table was dropped
-		var tableExists bool
-		err = db.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table')").Scan(&tableExists)
-		assert.NoError(t, err)
-		assert.False(t, tableExists)
+		// Setup
+		db := setupTestDB(t)
+		defer db.Close()
+
+		migrationDir, cleanupMigrations := createTestMigrations(t)
+		defer cleanupMigrations()
+
+		// Change working directory to the migration directory
+		originalWd, _ := os.Getwd()
+
+		err = os.Chdir(migrationDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalWd)
+
+		// Create Migrator
+		migrator := NewMigrator(db, migrationDir)
+		require.NotNil(t, migrator)
+
+		err = migrator.Up(context.Background())
+		require.NoError(t, err)
+
+		defer cleanTestMigrations(t, db)
+
+		err = migrator.Up(context.Background())
+		require.NoError(t, err)
 	})
 
-	t.Run("Up and Down Idempotency", func(t *testing.T) {
-		migrator := migration.NewMigrator(db, migrationDir)
+	// Test custom logger
+	t.Run("Custom Logger", func(t *testing.T) {
+		var err error
 
-		// Run Up twice
-		err := migrator.Up(ctx)
-		assert.NoError(t, err)
-		err = migrator.Up(ctx)
-		assert.NoError(t, err)
+		// Setup
+		db := setupTestDB(t)
+		defer db.Close()
 
-		// Verify that the table still exists
-		var tableExists bool
-		err = db.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table')").Scan(&tableExists)
-		assert.NoError(t, err)
-		assert.True(t, tableExists)
+		migrationDir, cleanupMigrations := createTestMigrations(t)
+		defer cleanupMigrations()
 
-		// Run Down twice
-		err = migrator.Down(ctx)
-		assert.NoError(t, err)
-		err = migrator.Down(ctx)
-		assert.NoError(t, err)
+		// Change working directory to the migration directory
+		originalWd, _ := os.Getwd()
 
-		// Verify that the table no longer exists
-		err = db.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table')").Scan(&tableExists)
-		assert.NoError(t, err)
-		assert.False(t, tableExists)
+		err = os.Chdir(migrationDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalWd)
+
+		// Create Migrator
+		migrator := NewMigrator(db, migrationDir)
+		require.NotNil(t, migrator)
+
+		defer cleanTestMigrations(t, db)
+
+		customLogger := log.New(os.Stdout, "TEST: ", log.Ldate|log.Ltime|log.Lshortfile)
+		migrator.WithCustomLogger(customLogger)
+		err = migrator.Up(context.Background())
+		require.NoError(t, err)
 	})
+}
+
+func TestMigratorErrors(t *testing.T) {
+	// Skip if running short tests
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	t.Run("Invalid pattern", func(t *testing.T) {
+		// Setup
+		db := setupTestDB(t)
+		defer db.Close()
+
+		// Create a migrator with an invalid pattern
+		invalidPath := string([]byte{0}) // null byte is invalid in file paths
+		migrator := NewMigrator(db, invalidPath)
+		migrator.globFunc = func(pattern string) ([]string, error) {
+			return nil, errors.New("syntax error in pattern")
+		}
+
+		err := migrator.Up(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "syntax error in pattern")
+	})
+
+	t.Run("Insufficient permissions", func(t *testing.T) {
+		// Setup
+		db := setupTestDB(t)
+		defer db.Close()
+
+		// Create a directory with no read permissions
+		noPermDir, err := os.MkdirTemp("", "no_perm_migrations")
+		require.NoError(t, err)
+		defer os.RemoveAll(noPermDir)
+
+		err = os.Chmod(noPermDir, 0000) // Remove all permissions
+		require.NoError(t, err)
+
+		migrator := NewMigrator(db, noPermDir)
+		migrator.globFunc = func(pattern string) ([]string, error) {
+			return nil, errors.New("permission denied")
+		}
+
+		err = migrator.Up(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "permission denied")
+	})
+
+	t.Run("Invalid connection", func(t *testing.T) {
+		var err error
+
+		// Create a migrator with an invalid database connection
+		invalidDB, err := sql.Open("postgres", "postgres://invalid:invalid@localhost:12343/invalid?sslmode=disable")
+		require.NoError(t, err)
+
+		migrationDir, cleanupMigrations := createTestMigrations(t)
+		defer cleanupMigrations()
+
+		// Change working directory to the migration directory
+		originalWd, _ := os.Getwd()
+
+		err = os.Chdir(migrationDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalWd)
+
+		migrator := NewMigrator(invalidDB, migrationDir)
+		err = migrator.Up(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "connect: connection refused")
+	})
+
+	t.Run("Database error", func(t *testing.T) {
+		var err error
+
+		// Setup
+		db := setupTestDB(t)
+
+		migrationDir, cleanupMigrations := createTestMigrations(t)
+		defer cleanupMigrations()
+
+		// Change working directory to the migration directory
+		originalWd, _ := os.Getwd()
+
+		err = os.Chdir(migrationDir)
+		require.NoError(t, err)
+		defer os.Chdir(originalWd)
+
+		migrator := NewMigrator(db, migrationDir)
+
+		// Close the database connection
+		db.Close()
+
+		err = migrator.Up(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "sql: database is closed")
+	})
+}
+
+func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	// Use environment variables or a test configuration for database connection
+	db, err := sql.Open("postgres", "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable")
+	require.NoError(t, err)
+
+	err = db.Ping()
+	require.NoError(t, err)
+
+	return db
+}
+
+func createTestMigrations(t *testing.T) (string, func()) {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "test_migrations")
+	require.NoError(t, err)
+
+	upSQL := `CREATE TABLE test_table (id SERIAL PRIMARY KEY, name TEXT);`
+	err = os.WriteFile(filepath.Join(dir, "001_create_test_table_up.sql"), []byte(upSQL), 0644)
+	require.NoError(t, err)
+
+	return dir, func() {
+		os.RemoveAll(dir)
+	}
+}
+
+func cleanTestMigrations(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	_, err := db.Exec("DROP TABLE IF EXISTS test_table")
+	require.NoError(t, err)
+
+	_, err = db.Exec("TRUNCATE TABLE migrations")
+	require.NoError(t, err)
 }

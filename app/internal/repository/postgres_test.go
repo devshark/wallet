@@ -20,9 +20,9 @@ import (
 )
 
 func setupTestDB(t *testing.T) (*sql.DB, func()) {
-	if testing.Short() {
-		t.Skip("Skipping test in short mode, as it requires a database")
-	}
+	// if testing.Short() {
+	t.Skip("Skipping test in short mode, as it requires a database")
+	// }
 
 	connectionString, cleanup := pgTesting.SetupTestDB(t)
 

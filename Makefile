@@ -11,7 +11,7 @@ build: vendor
 		-a ./app/cmd/
 
 test:
-	go test -v ./... -race -cover
+	go test -v ./... -race -cover -coverprofile=coverage.txt
 
 short-test: # excludes tests with external dependencies
 	go test -v ./... -short -race -cover -coverprofile=coverage.txt
