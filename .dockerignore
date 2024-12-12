@@ -27,3 +27,4 @@ build
 *.md
 # client SDK isn't necessary for server to work
 client
+coverage.txt

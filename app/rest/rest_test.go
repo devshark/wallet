@@ -2,47 +2,23 @@ package rest_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/devshark/wallet/api"
+	"github.com/devshark/wallet/app/internal/repository"
 	"github.com/devshark/wallet/app/rest"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-// MockRepository is a mock implementation of the repository.Repository interface
-type MockRepository struct {
-	mock.Mock
-}
-
-func (m *MockRepository) GetAccountBalance(ctx context.Context, currency, accountId string) (*api.Account, error) {
-	args := m.Called(ctx, currency, accountId)
-	return args.Get(0).(*api.Account), args.Error(1)
-}
-
-func (m *MockRepository) GetTransaction(ctx context.Context, txId string) (*api.Transaction, error) {
-	args := m.Called(ctx, txId)
-	return args.Get(0).(*api.Transaction), args.Error(1)
-}
-
-func (m *MockRepository) GetTransactions(ctx context.Context, currency, accountId string) ([]*api.Transaction, error) {
-	args := m.Called(ctx, currency, accountId)
-	return args.Get(0).([]*api.Transaction), args.Error(1)
-}
-
-func (m *MockRepository) Transfer(ctx context.Context, request *api.TransferRequest, idempotencyKey string) ([]*api.Transaction, error) {
-	args := m.Called(ctx, request, idempotencyKey)
-	return args.Get(0).([]*api.Transaction), args.Error(1)
-}
-
 func TestRestHandlers(t *testing.T) {
 	t.Run("HandleHealthCheck", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		req, err := http.NewRequest("GET", "/health", nil)
@@ -58,7 +34,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetAccountBalance", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		mockAccount := &api.Account{
@@ -91,7 +67,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetTransaction", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		mockTx := &api.Transaction{
@@ -126,7 +102,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("GetTransactions", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		mockTxs := []*api.Transaction{
@@ -159,7 +135,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleWithdrawal", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		withdrawRequest := &api.WithdrawRequest{
@@ -199,7 +175,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleDeposit", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		depositRequest := &api.DepositRequest{
@@ -238,7 +214,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleTransfer", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		transferRequest := &api.TransferRequest{
@@ -277,7 +253,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleTransfer - Missing Idempotency Key", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		transferRequest := &api.TransferRequest{
@@ -303,7 +279,7 @@ func TestRestHandlers(t *testing.T) {
 	})
 
 	t.Run("HandleTransfer - Invalid Request", func(t *testing.T) {
-		mockRepo := new(MockRepository)
+		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
 		invalidRequest := struct {
@@ -325,5 +301,142 @@ func TestRestHandlers(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, rr.Code)
 		require.Contains(t, rr.Body.String(), "invalid request")
+	})
+
+	t.Run("HandleWithdrawal_InvalidRequest", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		handlers := rest.NewRestHandlers(mockRepo)
+
+		invalidRequest := &api.WithdrawRequest{
+			FromAccountId: "", // Invalid: empty account ID
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(0), // Invalid: zero amount
+		}
+
+		body, _ := json.Marshal(invalidRequest)
+		req, err := http.NewRequest("POST", "/withdraw", bytes.NewBuffer(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Idempotency-Key", "test-key")
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleWithdrawal)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		var errorResponse api.ErrorResponse
+		json.Unmarshal(rr.Body.Bytes(), &errorResponse)
+		require.Equal(t, "invalid request", errorResponse.Message)
+	})
+
+	t.Run("HandleDeposit_MissingIdempotencyKey", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		handlers := rest.NewRestHandlers(mockRepo)
+
+		depositRequest := &api.DepositRequest{
+			ToAccountId: "user1",
+			Currency:    "USD",
+			Amount:      decimal.NewFromFloat(100.00),
+		}
+
+		body, _ := json.Marshal(depositRequest)
+		req, err := http.NewRequest("POST", "/deposit", bytes.NewBuffer(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		// Intentionally not setting X-Idempotency-Key
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleDeposit)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		var errorResponse api.ErrorResponse
+		json.Unmarshal(rr.Body.Bytes(), &errorResponse)
+		require.Equal(t, "missing idempotency key", errorResponse.Message)
+	})
+
+	t.Run("HandleWithdrawal_InsufficientBalance", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		handlers := rest.NewRestHandlers(mockRepo)
+
+		withdrawRequest := &api.WithdrawRequest{
+			FromAccountId: "user1",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+		}
+
+		mockRepo.On("Transfer", mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(nil, api.ErrInsufficientBalance)
+
+		body, _ := json.Marshal(withdrawRequest)
+		req, err := http.NewRequest("POST", "/withdraw", bytes.NewBuffer(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Idempotency-Key", "test-key")
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleWithdrawal)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+		var errorResponse api.ErrorResponse
+		json.Unmarshal(rr.Body.Bytes(), &errorResponse)
+		require.Equal(t, "insufficient balance", errorResponse.Message)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("HandleTransfer_InvalidAccountIDs", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		handlers := rest.NewRestHandlers(mockRepo)
+
+		transferRequest := &api.TransferRequest{
+			FromAccountId: "user1",
+			ToAccountId:   "user1", // Same as FromAccountId, which is invalid
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(50.00),
+		}
+
+		body, _ := json.Marshal(transferRequest)
+		req, err := http.NewRequest("POST", "/transfer", bytes.NewBuffer(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Idempotency-Key", "test-key")
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleTransfer)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		var errorResponse api.ErrorResponse
+		json.Unmarshal(rr.Body.Bytes(), &errorResponse)
+		require.Equal(t, "cannot transfer to the same account", errorResponse.Message)
+	})
+
+	t.Run("GetAccountBalance_RepositoryError", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		handlers := rest.NewRestHandlers(mockRepo)
+
+		mockRepo.On("GetAccountBalance", mock.Anything, "USD", "user1").Return(nil, errors.New("database error"))
+
+		req, err := http.NewRequest("GET", "/account/user1/USD", nil)
+		require.NoError(t, err)
+		req.SetPathValue("accountId", "user1")
+		req.SetPathValue("currency", "USD")
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.GetAccountBalance)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusInternalServerError, rr.Code)
+		var errorResponse api.ErrorResponse
+		json.Unmarshal(rr.Body.Bytes(), &errorResponse)
+		require.Equal(t, "failed to get account balance", errorResponse.Message)
+
+		mockRepo.AssertExpectations(t)
 	})
 }

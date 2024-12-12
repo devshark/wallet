@@ -14,7 +14,7 @@ test:
 	go test -v ./... -race -cover
 
 short-test: # excludes tests with external dependencies
-	go test -v ./... -short -race -cover
+	go test -v ./... -short -race -cover -coverprofile=coverage.txt
 
 run-server:
 	POSTGRES_HOST=localhost \

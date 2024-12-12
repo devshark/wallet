@@ -26,3 +26,5 @@ go.work.sum
 
 vendor
 build
+docs
+coverage.txt
