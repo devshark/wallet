@@ -26,16 +26,17 @@ type Migrator struct {
 	migrationPath string
 }
 
-func NewMigrator(db *sql.DB, migrationPath string) Migrator {
-	return NewMigratorWithLogger(db, log.Default(), migrationPath)
-}
-
-func NewMigratorWithLogger(db *sql.DB, logger *log.Logger, migrationPath string) Migrator {
-	return Migrator{
+func NewMigrator(db *sql.DB, migrationPath string) *Migrator {
+	return &Migrator{
 		db:            db,
-		logger:        logger,
+		logger:        log.Default(),
 		migrationPath: migrationPath,
 	}
+}
+
+func (r *Migrator) WithCustomLogger(logger *log.Logger) *Migrator {
+	r.logger = logger
+	return r
 }
 
 func (m *Migrator) Up(ctx context.Context) error {

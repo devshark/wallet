@@ -23,6 +23,11 @@ func NewPostgresRepository(db *sql.DB) Repository {
 	}
 }
 
+func (r *PostgresRepository) WithCustomLogger(logger *log.Logger) Repository {
+	r.logger = logger
+	return r
+}
+
 func (r *PostgresRepository) GetAccountBalance(ctx context.Context, currency, accountId string) (*api.Account, error) {
 	account := &api.Account{
 		Currency:  strings.ToUpper(strings.TrimSpace(currency)),

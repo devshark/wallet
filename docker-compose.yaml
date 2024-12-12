@@ -2,7 +2,7 @@ version: "3"
 
 services:
   app:
-    image: tx-parser-go:latest
+    image: wallet:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,14 +10,12 @@ services:
         - linux/amd64
     environment:
       PORT: 8080
-      PUBLIC_NODE_URL: https://ethereum-rpc.publicnode.com/
-      JOB_SCHEDULE: 1s
-      USE_DATABASE: true
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DATABASE: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      REDIS_ADDRESS: localhost:6379
     ports:
       - ${DOCKER_PUBLISH_IP:-127.0.0.1}:8080:8080
     restart: unless-stopped
@@ -26,16 +24,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      # redis:
-      #   condition: service_healthy
-    # Uncomment if other apps depend on this
-    # healthcheck:
-    #   test: ["CMD-SHELL", "curl", "--fail", "http://localhost:8080/health"]
-    #   # in case we can't install curl:
-    #   # test: ["CMD-SHELL", "nc -vz 127.0.0.1 8080 || exit 1"]
-    #   interval: 5s
-    #   timeout: 5s
-    #   retries: 5
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl", "--fail", "http://localhost:8080/health"]
+      # in case we can't install curl:
+      # test: ["CMD-SHELL", "nc -vz 127.0.0.1 8080 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:${POSTGRES_IMAGE_TAG:-16}
@@ -59,21 +56,21 @@ services:
       - -c
       - wal_level=logical
 
-  # TODO: can be used for http caching, or storage for latest block number
-  # redis:
-  #   image: redis:${REDIS_IMAGE_TAG:-7}
-  #   restart: ${RESTART_POLICY:-unless-stopped}
-  #   volumes:
-  #     - redis-data:/data
-  #   networks:
-  #     - wallet-app
-  #   ports:
-  #     - ${DOCKER_PUBLISH_IP:-127.0.0.1}:6389:6379
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  # only used as http cache for now
+  redis:
+    image: redis:${REDIS_IMAGE_TAG:-7}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - redis-data:/data
+    networks:
+      - wallet-app
+    ports:
+      - ${DOCKER_PUBLISH_IP:-127.0.0.1}:6389:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres-data:
