@@ -26,6 +26,11 @@ func (h *RestHandlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
+		h.HandleError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
 	if strings.EqualFold(request.ToAccountId, api.COMPANY_ACCOUNT_ID) {
 		h.HandleError(w, http.StatusBadRequest, "cannot deposit to company account")
 		return
@@ -81,6 +86,11 @@ func (h *RestHandlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if request.FromAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
+		h.HandleError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
 	if strings.EqualFold(request.FromAccountId, api.COMPANY_ACCOUNT_ID) {
 		h.HandleError(w, http.StatusBadRequest, "cannot withdraw from company account")
 		return
@@ -131,6 +141,11 @@ func (h *RestHandlers) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 	idempotencyKey := r.Header.Get("X-Idempotency-Key")
 	if idempotencyKey == "" {
 		h.HandleError(w, http.StatusBadRequest, "missing idempotency key")
+		return
+	}
+
+	if request.FromAccountId == "" || request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
+		h.HandleError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
