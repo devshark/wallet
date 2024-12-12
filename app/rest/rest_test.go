@@ -42,7 +42,7 @@ func TestRestHandlers(t *testing.T) {
 			Currency:  "USD",
 			Balance:   decimal.NewFromFloat(100.00),
 		}
-		mockRepo.On("GetAccountBalance", mock.Anything, "USD", "user1").Return(mockAccount, nil)
+		mockRepo.EXPECT().GetAccountBalance(mock.Anything, "USD", "user1").Return(mockAccount, nil)
 
 		req, err := http.NewRequest("GET", "/account/user1/USD", nil)
 		require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestRestHandlers(t *testing.T) {
 			Currency:  "USD",
 			Amount:    decimal.NewFromFloat(50.00),
 		}
-		mockRepo.On("GetTransaction", mock.Anything, "tx1").Return(mockTx, nil)
+		mockRepo.EXPECT().GetTransaction(mock.Anything, "tx1").Return(mockTx, nil)
 
 		req, err := http.NewRequest("GET", "/transactions/tx1", nil)
 		require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestRestHandlers(t *testing.T) {
 			{TxID: "tx1", AccountId: "user1", Currency: "USD", Amount: decimal.NewFromFloat(50.00)},
 			{TxID: "tx2", AccountId: "user1", Currency: "USD", Amount: decimal.NewFromFloat(25.00)},
 		}
-		mockRepo.On("GetTransactions", mock.Anything, "USD", "user1").Return(mockTxs, nil)
+		mockRepo.EXPECT().GetTransactions(mock.Anything, "USD", "user1").Return(mockTxs, nil)
 
 		req, err := http.NewRequest("GET", "/transactions/user1/USD", nil)
 		require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestRestHandlers(t *testing.T) {
 			{TxID: "tx1", AccountId: "user1", Currency: "USD", Type: api.DEBIT, Amount: decimal.NewFromFloat(-50.00)},
 			{TxID: "tx2", AccountId: api.COMPANY_ACCOUNT_ID, Type: api.CREDIT, Currency: "USD", Amount: decimal.NewFromFloat(50.00)},
 		}
-		mockRepo.On("Transfer", mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
+		mockRepo.EXPECT().Transfer(mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
 
 		body, _ := json.Marshal(withdrawRequest)
 		req, err := http.NewRequest("POST", "/withdraw", bytes.NewBuffer(body))
@@ -187,7 +187,7 @@ func TestRestHandlers(t *testing.T) {
 			{TxID: "tx1", AccountId: api.COMPANY_ACCOUNT_ID, Type: api.DEBIT, Currency: "USD", Amount: decimal.NewFromFloat(-100.00)},
 			{TxID: "tx2", AccountId: "user1", Currency: "USD", Type: api.CREDIT, Amount: decimal.NewFromFloat(100.00)},
 		}
-		mockRepo.On("Transfer", mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
+		mockRepo.EXPECT().Transfer(mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
 
 		body, _ := json.Marshal(depositRequest)
 		req, err := http.NewRequest("POST", "/deposit", bytes.NewBuffer(body))
@@ -227,7 +227,7 @@ func TestRestHandlers(t *testing.T) {
 			{TxID: "tx1", AccountId: "user1", Currency: "USD", Type: api.DEBIT, Amount: decimal.NewFromFloat(-75.00)},
 			{TxID: "tx2", AccountId: "user2", Currency: "USD", Type: api.CREDIT, Amount: decimal.NewFromFloat(75.00)},
 		}
-		mockRepo.On("Transfer", mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
+		mockRepo.EXPECT().Transfer(mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(mockTxs, nil)
 
 		body, _ := json.Marshal(transferRequest)
 		req, err := http.NewRequest("POST", "/transfer", bytes.NewBuffer(body))
@@ -367,7 +367,7 @@ func TestRestHandlers(t *testing.T) {
 			Amount:        decimal.NewFromFloat(1000.00),
 		}
 
-		mockRepo.On("Transfer", mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(nil, api.ErrInsufficientBalance)
+		mockRepo.EXPECT().Transfer(mock.Anything, mock.AnythingOfType("*api.TransferRequest"), mock.AnythingOfType("string")).Return(nil, api.ErrInsufficientBalance)
 
 		body, _ := json.Marshal(withdrawRequest)
 		req, err := http.NewRequest("POST", "/withdraw", bytes.NewBuffer(body))
@@ -420,7 +420,7 @@ func TestRestHandlers(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
-		mockRepo.On("GetAccountBalance", mock.Anything, "USD", "user1").Return(nil, errors.New("database error"))
+		mockRepo.EXPECT().GetAccountBalance(mock.Anything, "USD", "user1").Return(nil, errors.New("database error"))
 
 		req, err := http.NewRequest("GET", "/account/user1/USD", nil)
 		require.NoError(t, err)
