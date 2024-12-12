@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,12 +12,17 @@ import (
 )
 
 type RedisCacheMiddleware struct {
-	client      *redis.Client
+	client      GetterAndSetter
 	nextHandler http.Handler
 	expiration  time.Duration
 }
 
-func NewRedisCacheMiddleware(client *redis.Client, expiration time.Duration) func(http.HandlerFunc) http.HandlerFunc {
+type GetterAndSetter interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+}
+
+func NewRedisCacheMiddleware(client GetterAndSetter, expiration time.Duration) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		obj := &RedisCacheMiddleware{
 			client:      client,
