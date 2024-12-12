@@ -14,24 +14,24 @@ func (h *RestHandlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 	request := &api.DepositRequest{}
 	err := json.NewDecoder(r.Body).Decode(request)
 	if err != nil {
-		h.HandleError(w, http.StatusBadRequest, "failed to decode deposit request")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
 	// idempotency key is required
 	idempotencyKey := r.Header.Get("X-Idempotency-Key")
 	if idempotencyKey == "" {
-		h.HandleError(w, http.StatusBadRequest, "missing idempotency key")
+		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 		return
 	}
 
-	if request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
-		h.HandleError(w, http.StatusBadRequest, "invalid request")
+	if request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() || request.Amount.IsNegative() {
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
 	if strings.EqualFold(request.ToAccountId, api.COMPANY_ACCOUNT_ID) {
-		h.HandleError(w, http.StatusBadRequest, "cannot deposit to company account")
+		h.HandleError(w, http.StatusBadRequest, api.ErrCompanyAccount)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *RestHandlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// if the account id was not found in the transaction receipt
-	h.HandleError(w, http.StatusUnprocessableEntity, "your deposit was not processed successfully")
+	h.HandleError(w, http.StatusUnprocessableEntity, api.ErrIncompleteTransaction)
 }
 
 func (h *RestHandlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) {
@@ -70,24 +70,24 @@ func (h *RestHandlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) 
 	request := &api.WithdrawRequest{}
 	err := json.NewDecoder(r.Body).Decode(request)
 	if err != nil {
-		h.HandleError(w, http.StatusBadRequest, "failed to decode withdrawal request")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
 	// idempotency key is required
 	idempotencyKey := r.Header.Get("X-Idempotency-Key")
 	if idempotencyKey == "" {
-		h.HandleError(w, http.StatusBadRequest, "missing idempotency key")
+		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 		return
 	}
 
-	if request.FromAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
-		h.HandleError(w, http.StatusBadRequest, "invalid request")
+	if request.FromAccountId == "" || request.Currency == "" || request.Amount.IsZero() || request.Amount.IsNegative() {
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
 	if strings.EqualFold(request.FromAccountId, api.COMPANY_ACCOUNT_ID) {
-		h.HandleError(w, http.StatusBadRequest, "cannot withdraw from company account")
+		h.HandleError(w, http.StatusBadRequest, api.ErrCompanyAccount)
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *RestHandlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// if the account id was not found in the transaction receipt
-	h.HandleError(w, http.StatusUnprocessableEntity, "your withdrawal was not processed successfully")
+	h.HandleError(w, http.StatusUnprocessableEntity, api.ErrIncompleteTransaction)
 }
 
 // Allows transfers from user to another user
@@ -134,27 +134,22 @@ func (h *RestHandlers) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 	// idempotency key is required
 	idempotencyKey := r.Header.Get("X-Idempotency-Key")
 	if idempotencyKey == "" {
-		h.HandleError(w, http.StatusBadRequest, "missing idempotency key")
+		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 		return
 	}
 
-	if request.FromAccountId == "" || request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() {
-		h.HandleError(w, http.StatusBadRequest, "invalid request")
+	if request.FromAccountId == "" || request.ToAccountId == "" || request.Currency == "" || request.Amount.IsZero() || request.Amount.IsNegative() {
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
 	if strings.EqualFold(request.FromAccountId, request.ToAccountId) {
-		h.HandleError(w, http.StatusBadRequest, "cannot transfer to the same account")
+		h.HandleError(w, http.StatusBadRequest, api.ErrSameAccountIds)
 		return
 	}
 
-	if strings.EqualFold(request.FromAccountId, api.COMPANY_ACCOUNT_ID) {
-		h.HandleError(w, http.StatusBadRequest, "cannot transfer from company account")
-		return
-	}
-
-	if strings.EqualFold(request.ToAccountId, api.COMPANY_ACCOUNT_ID) {
-		h.HandleError(w, http.StatusBadRequest, "cannot transfer to company account")
+	if strings.EqualFold(request.FromAccountId, api.COMPANY_ACCOUNT_ID) || strings.EqualFold(request.ToAccountId, api.COMPANY_ACCOUNT_ID) {
+		h.HandleError(w, http.StatusBadRequest, api.ErrCompanyAccount)
 		return
 	}
 

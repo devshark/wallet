@@ -17,8 +17,3 @@ func NewRestHandlers(repo repository.Repository) *RestHandlers {
 		logger: log.Default(),
 	}
 }
-
-func (h *RestHandlers) WithCustomLogger(logger *log.Logger) *RestHandlers {
-	h.logger = logger
-	return h
-}

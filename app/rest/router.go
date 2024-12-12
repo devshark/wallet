@@ -49,14 +49,18 @@ func (r *RestApiServer) HttpServer(port int64, httpReadTimeout, httpWriteTimeout
 
 	middlewareChain := middlewares.MiddlewareChain(r.middlewares...)
 
+	// pointless to cache health check
 	mux.HandleFunc("GET /health", handler.HandleHealthCheck)
-	mux.HandleFunc("GET /account/{accountId}/{currency}", middlewareChain(handler.GetAccountBalance))
+	// don't cache account balance, as it may change frequently
+	mux.HandleFunc("GET /account/{accountId}/{currency}", (handler.GetAccountBalance))
+	// only cache transactions, as they are fixed
 	mux.HandleFunc("GET /transactions/{accountId}/{currency}", middlewareChain(handler.GetTransactions))
 	mux.HandleFunc("GET /transactions/{txId}", middlewareChain(handler.GetTransaction))
 
-	mux.HandleFunc("POST /deposit", middlewareChain(handler.HandleDeposit))
-	mux.HandleFunc("POST /withdraw", middlewareChain(handler.HandleWithdrawal))
-	mux.HandleFunc("POST /transfer", middlewareChain(handler.HandleTransfer))
+	// don't cache mutable endpoints
+	mux.HandleFunc("POST /deposit", (handler.HandleDeposit))
+	mux.HandleFunc("POST /withdraw", (handler.HandleWithdrawal))
+	mux.HandleFunc("POST /transfer", (handler.HandleTransfer))
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),

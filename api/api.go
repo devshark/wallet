@@ -8,17 +8,27 @@ import (
 )
 
 var (
-	ErrInvalidRequest       = errors.New("invalid request")
-	ErrAccountNotFound      = errors.New("account not found")
-	ErrInvalidAmount        = errors.New("invalid amount")
-	ErrInvalidCurrency      = errors.New("invalid currency")
-	ErrInvalidAccountId     = errors.New("invalid account id")
-	ErrSameAccountIds       = errors.New("same account ids")
+	ErrInvalidRequest   = errors.New("invalid request")
+	ErrAccountNotFound  = errors.New("account not found")
+	ErrInvalidAmount    = errors.New("invalid amount")
+	ErrInvalidCurrency  = errors.New("invalid currency")
+	ErrInvalidAccountId = errors.New("invalid account id")
+
+	ErrSameAccountIds = errors.New("same account ids")
+
 	ErrInvalidTxID          = errors.New("invalid tx id")
 	ErrInvalidAccount       = errors.New("invalid account")
 	ErrInsufficientBalance  = errors.New("insufficient balance")
 	ErrTransactionNotFound  = errors.New("transaction not found")
 	ErrDuplicateTransaction = errors.New("duplicate transaction")
+
+	ErrCompanyAccount = errors.New("cannot use company account")
+
+	ErrMissingIdempotencyKey = errors.New("missing idempotency key")
+
+	ErrTransferFailed         = errors.New("transfer failed")
+	ErrFailedToGetTransaction = errors.New("failed to get transaction")
+	ErrIncompleteTransaction  = errors.New("transaction did not complete")
 )
 
 type DebitOrCreditType string

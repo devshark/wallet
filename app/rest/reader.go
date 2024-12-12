@@ -15,19 +15,19 @@ func (h *RestHandlers) GetAccountBalance(w http.ResponseWriter, r *http.Request)
 	accountId := r.PathValue("accountId")
 
 	if currency == "" {
-		h.HandleError(w, http.StatusBadRequest, "invalid currency")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidCurrency)
 		return
 	}
 
 	if accountId == "" {
-		h.HandleError(w, http.StatusBadRequest, "invalid account id")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidAccountId)
 		return
 	}
 
 	account, err := h.repo.GetAccountBalance(ctx, currency, accountId)
 	if err != nil {
 		h.logger.Printf("failed to get account balance: %v\n", err)
-		h.HandleError(w, http.StatusInternalServerError, "failed to get account balance")
+		h.HandleError(w, http.StatusInternalServerError, api.ErrFailedToGetTransaction)
 		return
 	}
 
@@ -42,29 +42,33 @@ func (h *RestHandlers) GetTransactions(w http.ResponseWriter, r *http.Request) {
 	accountId := r.PathValue("accountId")
 
 	if currency == "" {
-		h.HandleError(w, http.StatusBadRequest, "invalid currency")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidCurrency)
 		return
 	}
 
 	if accountId == "" {
-		h.HandleError(w, http.StatusBadRequest, "invalid account id")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidAccountId)
 		return
 	}
 
 	transactions, err := h.repo.GetTransactions(ctx, currency, accountId)
-	if errors.Is(err, api.ErrTransactionNotFound) || transactions == nil {
-		h.HandleError(w, http.StatusNotFound, "transaction not found")
+	if errors.Is(err, api.ErrTransactionNotFound) {
+		h.HandleError(w, http.StatusNotFound, api.ErrTransactionNotFound)
 		return
 	}
 
 	if err != nil {
 		h.logger.Printf("failed to get transactions: %v\n", err)
-		h.HandleError(w, http.StatusInternalServerError, "failed to get transactions")
+		h.HandleError(w, http.StatusInternalServerError, api.ErrFailedToGetTransaction)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if transactions == nil {
+		w.Write([]byte("[]"))
+		return
+	}
 	json.NewEncoder(w).Encode(transactions)
 }
 
@@ -73,19 +77,19 @@ func (h *RestHandlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 	txId := r.PathValue("txId")
 
 	if txId == "" {
-		h.HandleError(w, http.StatusBadRequest, "invalid transaction id")
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidTxID)
 		return
 	}
 
 	tx, err := h.repo.GetTransaction(ctx, txId)
-	if errors.Is(err, api.ErrTransactionNotFound) || tx == nil {
-		h.HandleError(w, http.StatusNotFound, "transaction not found")
+	if errors.Is(err, api.ErrTransactionNotFound) {
+		h.HandleError(w, http.StatusNotFound, api.ErrTransactionNotFound)
 		return
 	}
 
 	if err != nil {
 		h.logger.Printf("failed to get transaction: %v\n", err)
-		h.HandleError(w, http.StatusInternalServerError, "failed to get transaction")
+		h.HandleError(w, http.StatusInternalServerError, api.ErrFailedToGetTransaction)
 		return
 	}
 
