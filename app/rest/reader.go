@@ -25,6 +25,11 @@ func (h *RestHandlers) GetAccountBalance(w http.ResponseWriter, r *http.Request)
 	}
 
 	account, err := h.repo.GetAccountBalance(ctx, currency, accountId)
+	if errors.Is(err, api.ErrAccountNotFound) {
+		h.HandleError(w, http.StatusNotFound, err)
+		return
+	}
+
 	if err != nil {
 		h.logger.Printf("failed to get account balance: %v\n", err)
 		h.HandleError(w, http.StatusInternalServerError, api.ErrFailedToGetTransaction)

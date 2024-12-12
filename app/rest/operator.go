@@ -127,7 +127,7 @@ func (h *RestHandlers) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 	request := &api.TransferRequest{}
 	err := json.NewDecoder(r.Body).Decode(request)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.HandleError(w, http.StatusBadRequest, api.ErrInvalidRequest)
 		return
 	}
 
