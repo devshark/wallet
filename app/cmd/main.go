@@ -44,6 +44,10 @@ func main() {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(60 * time.Minute)
+	db.SetConnMaxIdleTime(10 * time.Minute)
+
 	if err = db.Ping(); err != nil {
 		logger.Fatalf("Failed to reach database: %v", err)
 	}

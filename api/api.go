@@ -14,6 +14,7 @@ var (
 	ErrInvalidCurrency  = errors.New("invalid currency")
 	ErrInvalidAccountId = errors.New("invalid account id")
 
+	ErrNegativeAmount = errors.New("negative amount")
 	ErrSameAccountIds = errors.New("same account ids")
 
 	ErrInvalidTxID          = errors.New("invalid tx id")

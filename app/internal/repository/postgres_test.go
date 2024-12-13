@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	"github.com/devshark/wallet/api"
 	"github.com/devshark/wallet/app/internal/migration"
 	"github.com/devshark/wallet/app/internal/repository"
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
@@ -28,93 +26,193 @@ func setupTestDB(t *testing.T) *sql.DB {
 	require.NoError(t, err)
 	require.NoError(t, db.Ping())
 
-	originalWd, _ := os.Getwd()
-	t.Log("Current working directory:", originalWd)
-
-	migrator := migration.NewMigrator(db, "../../../migration")
+	// the migration files are here
+	migrator := migration.NewMigrator(db, "../../../migrations")
 	err = migrator.Up(context.Background())
 	require.NoError(t, err)
 
 	return db
 }
 
-func TestPostgresRepository(t *testing.T) {
+type dummyAccount struct {
+	accountId string
+	userId    string
+}
+
+type dummyTransaction struct {
+	transactionId string
+}
+
+func createAccount(t *testing.T, ctx context.Context, db *sql.DB, subject *api.Account) dummyAccount {
+	t.Helper()
+
+	var accountId string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO accounts (user_id, currency, balance)
+		VALUES ($1, $2, $3) RETURNING id`, subject.AccountId, subject.Currency, subject.Balance).Scan(&accountId)
+	require.NoError(t, err)
+	require.NotEmpty(t, accountId)
+
+	return dummyAccount{
+		accountId: accountId,
+		userId:    subject.AccountId,
+	}
+}
+
+func createAccounts(t *testing.T, ctx context.Context, db *sql.DB, count int) []dummyAccount {
+	t.Helper()
+
+	dummyAccounts := make([]dummyAccount, count)
+	for i := 0; i < count; i++ {
+		dummyAccounts[i] = createAccount(t, ctx, db, &api.Account{
+			AccountId: "account_" + strconv.Itoa(i),
+			Currency:  "USD",
+			Balance:   decimal.NewFromInt(0),
+		})
+	}
+
+	return dummyAccounts
+}
+
+func createTransaction(t *testing.T, ctx context.Context, db *sql.DB, accountId string, subject *api.Transaction) dummyTransaction {
+	t.Helper()
+
+	var transactionId string
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO transactions (account_id, amount, group_id, description, debit_credit)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		accountId, subject.Amount, subject.Remarks, subject.Remarks, subject.Type).Scan(&transactionId)
+	require.NoError(t, err)
+
+	return dummyTransaction{transactionId: transactionId}
+}
+
+func createTransactions(t *testing.T, ctx context.Context, db *sql.DB, dummyAccounts []dummyAccount) []dummyTransaction {
+	t.Helper()
+
+	dummyTransactions := make([]dummyTransaction, len(dummyAccounts))
+
+	for i, dummyAccount := range dummyAccounts {
+		dummyTransactions[i] = createTransaction(t, ctx, db, dummyAccount.accountId, &api.Transaction{
+			AccountId: dummyAccount.accountId,
+			Amount:    decimal.NewFromFloat(50.00),
+			Remarks:   "CreateTransactions",
+			Type:      api.CREDIT,
+		})
+	}
+
+	return dummyTransactions
+}
+
+func createAccountTransactions(t *testing.T, ctx context.Context, db *sql.DB, dbAccountId string, account *api.Account, count int) []dummyTransaction {
+	t.Helper()
+
+	dummyTransactions := make([]dummyTransaction, count)
+
+	for i := 0; i < count; i++ {
+		dummyTransactions[i] = createTransaction(t, ctx, db, dbAccountId, &api.Transaction{
+			AccountId: account.AccountId,
+			Amount:    decimal.NewFromFloat(50.00),
+			Remarks:   "CreateAccountTransactions" + strconv.Itoa(i),
+			Type:      api.CREDIT,
+		})
+	}
+
+	return dummyTransactions
+}
+
+func setCleanUp(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		var err error
+
+		_, err = db.ExecContext(context.Background(), "TRUNCATE TABLE accounts CASCADE;")
+		require.NoError(t, err)
+
+		_, err = db.ExecContext(context.Background(), "TRUNCATE TABLE transactions")
+		require.NoError(t, err)
+
+		db.Close()
+	})
+}
+
+func TestGetAccountBalance(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
 
 	repo := repository.NewPostgresRepository(db)
 
-	t.Run("GetAccountBalance", func(t *testing.T) {
-		ctx := context.Background()
-
-		defer db.Exec("DELETE FROM transactions WHERE description = 'GetAccountBalance';")
-
-		_, err := db.Exec(`
-			INSERT INTO transactions (account_id, currency, amount, balance, group_id, description, debit_credit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			"user1", "USD", 100.00, 100.00, "GetAccountBalance1", "GetAccountBalance", api.CREDIT)
-		require.NoError(t, err)
-
-		account, err := repo.GetAccountBalance(ctx, "USD", "user1")
-		require.NoError(t, err)
-		require.NotNil(t, account)
-		require.Equal(t, "USD", account.Currency)
-		require.Equal(t, "user1", account.AccountId)
-		require.True(t, account.Balance.Equal(decimal.NewFromFloat(100.00)))
-	})
-
-	t.Run("GetTransaction", func(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
 		var err error
 
-		id1 := uuid.New().String()
-		id2 := uuid.New().String()
+		setCleanUp(t, db)
 
-		defer db.ExecContext(ctx, "DELETE FROM transactions WHERE description = 'GetTransaction';")
+		subject := &api.Account{
+			AccountId: "GetAccountBalance_user1",
+			Currency:  "USD",
+			Balance:   decimal.NewFromFloat(100.00),
+		}
 
-		_, err = db.ExecContext(ctx, `
-			INSERT INTO transactions (id, account_id, currency, amount, balance, group_id, description, debit_credit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			id1, "user1", "USD", 50.00, 80.99, "GetTransaction1", "GetTransaction", api.CREDIT)
+		_ = createAccount(t, ctx, db, subject)
+		// defer dummyAccount.cleanFunc()
+
+		account, err := repo.GetAccountBalance(ctx, subject.Currency, subject.AccountId)
 		require.NoError(t, err)
+		require.NotNil(t, account)
+		require.Equal(t, subject.Currency, account.Currency)
+		require.Equal(t, subject.AccountId, account.AccountId)
+		require.True(t, account.Balance.Equal(decimal.NewFromFloat(100.00)))
+	})
+}
 
-		_, err = db.ExecContext(ctx, `
-			INSERT INTO transactions (id, account_id, currency, amount, balance, group_id, description, debit_credit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			id2, "user2", "USD", 50.00, 69.00, "GetTransaction1", "GetTransaction", api.DEBIT)
-		require.NoError(t, err)
+func TestGetTransaction(t *testing.T) {
+	db := setupTestDB(t)
 
-		tx, err := repo.GetTransaction(ctx, id1)
+	repo := repository.NewPostgresRepository(db)
+
+	t.Run("OK", func(t *testing.T) {
+		ctx := context.Background()
+		var err error
+
+		setCleanUp(t, db)
+
+		dummyAccounts := createAccounts(t, ctx, db, 5)
+		dummyTransactions := createTransactions(t, ctx, db, dummyAccounts)
+
+		tx, err := repo.GetTransaction(ctx, dummyTransactions[0].transactionId)
 		require.NoError(t, err)
 		require.NotNil(t, tx)
 
 		require.NotEmpty(t, tx.TxID)
-		require.Equal(t, "user1", tx.AccountId)
+		require.Equal(t, dummyTransactions[0].transactionId, tx.TxID)
+		require.Equal(t, dummyAccounts[0].userId, tx.AccountId)
 		require.Equal(t, "USD", tx.Currency)
 		require.True(t, tx.Amount.Equal(decimal.NewFromFloat(50.00)))
 	})
+}
 
-	t.Run("GetTransactions", func(t *testing.T) {
+func TestGetTransactions(t *testing.T) {
+	db := setupTestDB(t)
+
+	repo := repository.NewPostgresRepository(db)
+
+	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
 		var err error
 
-		// cleanup
-		defer db.ExecContext(ctx, "DELETE FROM transactions WHERE description = 'GetTransactions'")
+		setCleanUp(t, db)
 
-		for i := 0; i < 5; i++ {
-			_, err = db.Exec(`
-				INSERT INTO transactions (account_id, description, currency, amount, balance, group_id, debit_credit)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				"user1", "GetTransactions", "USD", 50.00, 202.53, "GetTransactions"+strconv.Itoa(i), api.CREDIT)
-			require.NoError(t, err)
-			_, err = db.Exec(`
-				INSERT INTO transactions (account_id, description, currency, amount, balance, group_id, debit_credit)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				"user2", "GetTransactions", "USD", 50.00, 14532.3245, "GetTransactions"+strconv.Itoa(i), api.DEBIT)
-			require.NoError(t, err)
+		subject := &api.Account{
+			AccountId: "user1",
+			Currency:  "USD",
+			Balance:   decimal.NewFromInt(0),
 		}
 
-		txs, err := repo.GetTransactions(ctx, "USD", "user1")
+		dbAccountId := createAccount(t, ctx, db, subject)
+		_ = createAccountTransactions(t, ctx, db, dbAccountId.accountId, subject, 5)
+
+		txs, err := repo.GetTransactions(ctx, subject.Currency, subject.AccountId)
 		require.NoError(t, err)
 		require.NotEmpty(t, txs)
 		require.Len(t, txs, 5)
@@ -124,12 +222,20 @@ func TestPostgresRepository(t *testing.T) {
 			require.Equal(t, "user1", tx.AccountId)
 			require.NotEmpty(t, tx.TxID)
 			require.True(t, tx.Amount.Equal(decimal.NewFromFloat(50.00)))
-			require.Equal(t, "GetTransactions", tx.Remarks)
 		}
 	})
 
-	t.Run("Transfer", func(t *testing.T) {
+}
+
+func TestTransfer(t *testing.T) {
+	db := setupTestDB(t)
+
+	repo := repository.NewPostgresRepository(db)
+
+	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
+
+		setCleanUp(t, db)
 
 		request := &api.TransferRequest{
 			FromAccountId: api.COMPANY_ACCOUNT_ID,
@@ -139,8 +245,6 @@ func TestPostgresRepository(t *testing.T) {
 			Remarks:       "TestTransfer",
 		}
 
-		defer db.ExecContext(ctx, "DELETE FROM transactions WHERE description = 'TestTransfer';")
-
 		txs, err := repo.Transfer(ctx, request, "some-idempotency-key")
 		require.NoError(t, err)
 		require.Len(t, txs, 2) // Expecting two transactions for a transfer
@@ -148,12 +252,9 @@ func TestPostgresRepository(t *testing.T) {
 }
 
 func TestConcurrentTransfers(t *testing.T) {
-	t.SkipNow()
-
 	db := setupTestDB(t)
-	defer db.Close()
 
-	defer db.Exec("DELETE FROM transactions where description = 'TestConcurrentTransfers'")
+	setCleanUp(t, db)
 
 	repo := repository.NewPostgresRepository(db)
 	ctx := context.Background()
@@ -183,12 +284,11 @@ func TestConcurrentTransfers(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
-	errors := make([]error, 0, concurrency)
-	done := make(chan bool)
 
 	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer wg.Done()
+
 			_, err := repo.Transfer(ctx, &api.TransferRequest{
 				FromAccountId: "user1",
 				ToAccountId:   "user2",
@@ -196,21 +296,12 @@ func TestConcurrentTransfers(t *testing.T) {
 				Amount:        transferAmount,
 				Remarks:       "TestConcurrentTransfers",
 			}, fmt.Sprintf("concurrent-transfer-%s", strconv.Itoa(i)))
-			if err != nil {
-				errors = append(errors, err)
-			}
-			done <- true
+
+			require.NoError(t, err)
 		}()
 	}
 
-	// Wait for all goroutines to finish
-	for i := 0; i < concurrency; i++ {
-		<-done
-	}
-
 	wg.Wait()
-
-	require.Empty(t, errors)
 
 	// Check final balances
 	user1Balance, err := repo.GetAccountBalance(ctx, "USD", "user1")
