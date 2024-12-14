@@ -7,6 +7,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.10.0
+	go.uber.org/goleak v1.3.0
 )
 
 require (

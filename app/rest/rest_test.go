@@ -14,9 +14,12 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestHandleHealthCheck(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := repository.NewMockRepository(t)
 	handlers := rest.NewRestHandlers(mockRepo)
 
@@ -33,6 +36,8 @@ func TestHandleHealthCheck(t *testing.T) {
 }
 
 func TestGetAccountBalance(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("OK", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -155,6 +160,8 @@ func TestGetAccountBalance(t *testing.T) {
 }
 
 func TestGetTransactions(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("OK", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -302,6 +309,8 @@ func TestGetTransactions(t *testing.T) {
 }
 
 func TestGetTransaction(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("OK", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -414,6 +423,8 @@ func TestGetTransaction(t *testing.T) {
 }
 
 func TestHandleDepositOK(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := repository.NewMockRepository(t)
 	handlers := rest.NewRestHandlers(mockRepo)
 
@@ -456,6 +467,8 @@ func TestHandleDepositOK(t *testing.T) {
 }
 
 func TestHandleDepositInputValidation(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Missing Idempotency Key", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -548,6 +561,8 @@ func TestHandleDepositInputValidation(t *testing.T) {
 }
 
 func TestHandleDeposit(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Deposit to Company Account", func(t *testing.T) {
 		handlers := rest.NewRestHandlers(nil)
 
@@ -712,6 +727,8 @@ func TestHandleDeposit(t *testing.T) {
 }
 
 func TestHandleWithdrawalOK(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := repository.NewMockRepository(t)
 	handlers := rest.NewRestHandlers(mockRepo)
 
@@ -754,6 +771,8 @@ func TestHandleWithdrawalOK(t *testing.T) {
 }
 
 func TestHandleWithdrawalInputValidation(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Invalid Requests", func(t *testing.T) {
 		requests := []*api.WithdrawRequest{
 			{
@@ -845,6 +864,8 @@ func TestHandleWithdrawalInputValidation(t *testing.T) {
 }
 
 func TestHandleWithdrawal(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Insufficient Balance", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -1043,6 +1064,8 @@ func TestHandleWithdrawal(t *testing.T) {
 }
 
 func TestHandleTransferOK(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := repository.NewMockRepository(t)
 	handlers := rest.NewRestHandlers(mockRepo)
 
@@ -1085,6 +1108,8 @@ func TestHandleTransferOK(t *testing.T) {
 }
 
 func TestHandleTransferInputValidations(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Missing Idempotency Key", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
@@ -1236,6 +1261,8 @@ func TestHandleTransferInputValidations(t *testing.T) {
 }
 
 func TestHandleTransfer(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	t.Run("Repo failed", func(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)

@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestMigrator(t *testing.T) {
@@ -18,6 +19,8 @@ func TestMigrator(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+
+	defer goleak.VerifyNone(t)
 
 	// Test Up migration
 	t.Run("Up", func(t *testing.T) {
@@ -133,7 +136,12 @@ func TestMigratorErrors(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	defer goleak.VerifyNone(t)
+
 	t.Run("Invalid pattern", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		// Setup
 		db := setupTestDB(t)
 		defer db.Close()
@@ -145,12 +153,15 @@ func TestMigratorErrors(t *testing.T) {
 			return nil, errors.New("syntax error in pattern")
 		}
 
-		err := migrator.Up(context.Background())
+		err := migrator.Up(ctx)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "syntax error in pattern")
 	})
 
 	t.Run("Insufficient permissions", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		// Setup
 		db := setupTestDB(t)
 		defer db.Close()
@@ -168,17 +179,22 @@ func TestMigratorErrors(t *testing.T) {
 			return nil, errors.New("permission denied")
 		}
 
-		err = migrator.Up(context.Background())
+		err = migrator.Up(ctx)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "permission denied")
 	})
 
 	t.Run("Invalid connection", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		var err error
 
 		// Create a migrator with an invalid database connection
 		invalidDB, err := sql.Open("postgres", "postgres://invalid:invalid@localhost:12343/invalid?sslmode=disable")
 		require.NoError(t, err)
+
+		defer invalidDB.Close()
 
 		migrationDir, cleanupMigrations := createTestMigrations(t)
 		defer cleanupMigrations()
@@ -195,12 +211,15 @@ func TestMigratorErrors(t *testing.T) {
 		}()
 
 		migrator := NewMigrator(invalidDB, migrationDir)
-		err = migrator.Up(context.Background())
+		err = migrator.Up(ctx)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "connect: connection refused")
 	})
 
 	t.Run("Database error", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		var err error
 
 		// Setup
@@ -223,9 +242,10 @@ func TestMigratorErrors(t *testing.T) {
 		migrator := NewMigrator(db, migrationDir)
 
 		// Close the database connection
-		db.Close()
+		err = db.Close()
+		require.NoError(t, err)
 
-		err = migrator.Up(context.Background())
+		err = migrator.Up(ctx)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "sql: database is closed")
 	})
@@ -241,7 +261,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	require.NoError(t, err)
 
 	err = db.Ping()
-	require.NoError(t, err)
+	if err != nil {
+		db.Close()
+		require.Fail(t, "ping failed")
+	}
 
 	return db
 }

@@ -12,9 +12,12 @@ import (
 	"github.com/devshark/wallet/app/internal/repository"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestNewApiServer(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := &repository.MockRepository{}
 	server := NewAPIServer(mockRepo)
 
@@ -25,6 +28,8 @@ func TestNewApiServer(t *testing.T) {
 }
 
 func TestWithCacheMiddleware(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := &repository.MockRepository{}
 	server := NewAPIServer(mockRepo)
 
@@ -38,6 +43,8 @@ func TestWithCacheMiddleware(t *testing.T) {
 }
 
 func TestWithCustomLogger(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := &repository.MockRepository{}
 	server := NewAPIServer(mockRepo)
 
@@ -49,6 +56,8 @@ func TestWithCustomLogger(t *testing.T) {
 }
 
 func TestHttpServer(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	mockRepo := &repository.MockRepository{}
 	server := NewAPIServer(mockRepo)
 

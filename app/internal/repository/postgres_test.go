@@ -14,6 +14,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
@@ -132,18 +133,17 @@ func setCleanUp(t *testing.T, db *sql.DB) {
 	t.Cleanup(func() {
 		var err error
 
+		defer db.Close()
+
 		_, err = db.ExecContext(context.Background(), "TRUNCATE TABLE accounts CASCADE;")
 		require.NoError(t, err)
-
-		_, err = db.ExecContext(context.Background(), "TRUNCATE TABLE transactions")
-		require.NoError(t, err)
-
-		db.Close()
 	})
 }
 
 func TestGetAccountBalance(t *testing.T) {
 	db := setupTestDB(t)
+
+	defer goleak.VerifyNone(t)
 
 	repo := repository.NewPostgresRepository(db)
 
@@ -174,6 +174,8 @@ func TestGetAccountBalance(t *testing.T) {
 func TestGetTransaction(t *testing.T) {
 	db := setupTestDB(t)
 
+	defer goleak.VerifyNone(t)
+
 	repo := repository.NewPostgresRepository(db)
 
 	t.Run("OK", func(t *testing.T) {
@@ -200,6 +202,8 @@ func TestGetTransaction(t *testing.T) {
 
 func TestGetTransactions(t *testing.T) {
 	db := setupTestDB(t)
+
+	defer goleak.VerifyNone(t)
 
 	repo := repository.NewPostgresRepository(db)
 
@@ -236,6 +240,8 @@ func TestGetTransactions(t *testing.T) {
 func TestTransfer(t *testing.T) {
 	db := setupTestDB(t)
 
+	defer goleak.VerifyNone(t)
+
 	repo := repository.NewPostgresRepository(db)
 
 	t.Run("OK", func(t *testing.T) {
@@ -258,69 +264,74 @@ func TestTransfer(t *testing.T) {
 }
 
 func TestConcurrentTransfers(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	db := setupTestDB(t)
 
-	setCleanUp(t, db)
-
 	repo := repository.NewPostgresRepository(db)
-	ctx := context.Background()
 
-	// Setup initial balances
-	_, err := repo.Transfer(ctx, &api.TransferRequest{
-		FromAccountID: api.CompanyAccountID,
-		ToAccountID:   "user1",
-		Currency:      "USD",
-		Amount:        decimal.NewFromFloat(1000.00),
-		Remarks:       "TestConcurrentTransfers",
-	}, "initial-balance-user1")
-	require.NoError(t, err)
+	t.Run("OK", func(t *testing.T) {
+		ctx := context.Background()
 
-	_, err = repo.Transfer(ctx, &api.TransferRequest{
-		FromAccountID: api.CompanyAccountID,
-		ToAccountID:   "user2",
-		Currency:      "USD",
-		Amount:        decimal.NewFromFloat(1000.00),
-		Remarks:       "TestConcurrentTransfers",
-	}, "initial-balance-user2")
-	require.NoError(t, err)
+		setCleanUp(t, db)
 
-	// Concurrent transfers
-	concurrency := 10
-	transferAmount := decimal.NewFromFloat(10.00)
+		// Setup initial balances
+		_, err := repo.Transfer(ctx, &api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user1",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "TestConcurrentTransfers",
+		}, "initial-balance-user1")
+		require.NoError(t, err)
 
-	var wg sync.WaitGroup
+		_, err = repo.Transfer(ctx, &api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user2",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "TestConcurrentTransfers",
+		}, "initial-balance-user2")
+		require.NoError(t, err)
 
-	wg.Add(concurrency)
+		// Concurrent transfers
+		concurrency := 10
+		transferAmount := decimal.NewFromFloat(10.00)
 
-	for i := range concurrency {
-		go func() {
-			defer wg.Done()
+		var wg sync.WaitGroup
 
-			_, errTransfer := repo.Transfer(ctx, &api.TransferRequest{
-				FromAccountID: "user1",
-				ToAccountID:   "user2",
-				Currency:      "USD",
-				Amount:        transferAmount,
-				Remarks:       "TestConcurrentTransfers",
-			}, fmt.Sprintf("concurrent-transfer-%s", strconv.Itoa(i)))
+		wg.Add(concurrency)
 
-			require.NoError(t, errTransfer)
-		}()
-	}
+		for i := range concurrency {
+			go func() {
+				defer wg.Done()
 
-	wg.Wait()
+				_, errTransfer := repo.Transfer(ctx, &api.TransferRequest{
+					FromAccountID: "user1",
+					ToAccountID:   "user2",
+					Currency:      "USD",
+					Amount:        transferAmount,
+					Remarks:       "TestConcurrentTransfers",
+				}, fmt.Sprintf("concurrent-transfer-%s", strconv.Itoa(i)))
 
-	// Check final balances
-	user1Balance, err := repo.GetAccountBalance(ctx, "USD", "user1")
-	require.NoError(t, err)
-	user2Balance, err := repo.GetAccountBalance(ctx, "USD", "user2")
-	require.NoError(t, err)
+				require.NoError(t, errTransfer)
+			}()
+		}
 
-	expectedUser1Balance := decimal.NewFromFloat(900.00)
-	expectedUser2Balance := decimal.NewFromFloat(1100.00)
+		wg.Wait()
 
-	require.True(t, user1Balance.Balance.Equal(expectedUser1Balance),
-		"Expected user1 balance to be %s, but got %s", expectedUser1Balance, user1Balance.Balance)
-	require.True(t, user2Balance.Balance.Equal(expectedUser2Balance),
-		"Expected user2 balance to be %s, but got %s", expectedUser2Balance, user2Balance.Balance)
+		// Check final balances
+		user1Balance, err := repo.GetAccountBalance(ctx, "USD", "user1")
+		require.NoError(t, err)
+		user2Balance, err := repo.GetAccountBalance(ctx, "USD", "user2")
+		require.NoError(t, err)
+
+		expectedUser1Balance := decimal.NewFromFloat(900.00)
+		expectedUser2Balance := decimal.NewFromFloat(1100.00)
+
+		require.True(t, user1Balance.Balance.Equal(expectedUser1Balance),
+			"Expected user1 balance to be %s, but got %s", expectedUser1Balance, user1Balance.Balance)
+		require.True(t, user2Balance.Balance.Equal(expectedUser2Balance),
+			"Expected user2 balance to be %s, but got %s", expectedUser2Balance, user2Balance.Balance)
+	})
 }
