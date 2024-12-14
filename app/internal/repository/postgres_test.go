@@ -23,7 +23,11 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Skip("Skipping test in short mode, as it requires a database")
 	}
 
-	db, err := sql.Open("postgres", "user=postgres password=postgres host=localhost port=5433 dbname=postgres sslmode=disable")
+	// if running using docker compose:
+	// db, err := sql.Open("postgres", "user=postgres password=postgres host=postgres port=5432 dbname=postgres sslmode=disable")
+	// if running outside the container:
+	// db, err := sql.Open("postgres", "user=postgres password=postgres host=localhost port=5433 dbname=postgres sslmode=disable")
+	db, err := sql.Open("postgres", "user=postgres password=postgres host=postgres port=5432 dbname=postgres sslmode=disable")
 	require.NoError(t, err)
 	require.NoError(t, db.Ping())
 

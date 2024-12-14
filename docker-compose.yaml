@@ -6,8 +6,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: prod
       platforms:
         - linux/amd64
+    profiles:
+      - dev
     environment:
       PORT: 8080
       POSTGRES_USER: postgres
@@ -34,6 +37,32 @@ services:
       timeout: 5s
       retries: 5
 
+  test:
+    image: wallet:test
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+      platforms:
+        - linux/amd64
+    profiles:
+      - integration
+    command: make test
+    ## some refactors are needed if we want tests to depend on env
+    ## but introduces unnecessary complexity
+    # environment:
+    #   POSTGRES_USER: postgres
+    #   POSTGRES_PASSWORD: postgres
+    #   POSTGRES_DATABASE: postgres
+    #   POSTGRES_HOST: postgres
+    #   POSTGRES_PORT: 5432
+    restart: "no"
+    networks:
+      - wallet-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:${POSTGRES_IMAGE_TAG:-16}
     restart: ${RESTART_POLICY:-unless-stopped}
@@ -43,8 +72,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+    profiles:
+      - dev
+      - integration
     networks:
       - wallet-app
+      - wallet-test
     ports:
       - ${DOCKER_PUBLISH_IP:-127.0.0.1}:5433:5432
     healthcheck:
@@ -64,6 +97,8 @@ services:
       - redis-data:/data
     networks:
       - wallet-app
+    profiles:
+      - dev
     ports:
       - ${DOCKER_PUBLISH_IP:-127.0.0.1}:6389:6379
     healthcheck:
@@ -78,3 +113,4 @@ volumes:
 
 networks:
   wallet-app:
+  wallet-test:

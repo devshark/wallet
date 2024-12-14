@@ -233,8 +233,11 @@ func TestMigratorErrors(t *testing.T) {
 
 func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	// Use environment variables or a test configuration for database connection
-	db, err := sql.Open("postgres", "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable")
+	// if running using docker compose:
+	// db, err := sql.Open("postgres", "user=postgres password=postgres host=postgres port=5432 dbname=postgres sslmode=disable")
+	// if running outside the container:
+	// db, err := sql.Open("postgres", "user=postgres password=postgres host=localhost port=5433 dbname=postgres sslmode=disable")
+	db, err := sql.Open("postgres", "user=postgres password=postgres host=postgres port=5432 dbname=postgres sslmode=disable")
 	require.NoError(t, err)
 
 	err = db.Ping()

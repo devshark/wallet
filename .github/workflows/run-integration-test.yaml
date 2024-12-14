@@ -1,0 +1,24 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  test:
+    name: Run Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run Docker Compose Test
+        run: docker compose --profile integration up --build --exit-code-from=test
+
+      - name: Clean up
+        run: docker compose --profile integration down -v --remove-orphans
