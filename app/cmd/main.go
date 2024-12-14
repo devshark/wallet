@@ -140,7 +140,9 @@ func NewConfig() Config {
 			Database: env.RequireEnv("POSTGRES_DATABASE"),
 		},
 		redisOptions: redis.Options{
-			Addr: env.RequireEnv("REDIS_ADDRESS"),
+			Addr:     env.RequireEnv("REDIS_ADDRESS"),
+			Username: env.GetEnv("REDIS_USERNAME", ""), // optional
+			Password: env.GetEnv("REDIS_PASSWORD", ""), // optional
 		},
 	}
 }

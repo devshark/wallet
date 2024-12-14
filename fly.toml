@@ -1,0 +1,31 @@
+# fly.toml app configuration file generated for waas on 2024-12-15T00:46:32+08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'waas'
+primary_region = 'hkg'
+
+[build]
+
+[env]
+  PORT = '8080'
+  POSTGRES_DATABASE = 'waas'
+  POSTGRES_HOST = 'waas-db.flycast'
+  POSTGRES_PORT = '5432'
+  POSTGRES_USER = 'waas'
+  REDIS_ADDRESS = 'fly-waas.upstash.io:6379'
+  REDIS_USERNAME = 'default'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 2
