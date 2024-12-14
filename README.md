@@ -6,6 +6,7 @@ Wallet as a service
 [![Tests](https://github.com/devshark/wallet/actions/workflows/tests.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/tests.yaml)
 [![Integration Tests](https://github.com/devshark/wallet/actions/workflows/integration-test.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/integration-test.yaml)
 [![Go Linter](https://github.com/devshark/wallet/actions/workflows/linter.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/linter.yaml)
+[![Fly Deploy](https://github.com/devshark/wallet/actions/workflows/fly-deploy.yml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/fly-deploy.yml)
 
 ## Features
 
