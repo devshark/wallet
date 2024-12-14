@@ -55,7 +55,9 @@ func TestAccountReaderClient_GetAccountBalance(t *testing.T) {
 
 	t.Run("Invalid JSON response", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte("invalid json"))
+			_, err := w.Write([]byte("invalid json"))
+
+			require.NoError(t, err)
 		}))
 		defer server.Close()
 
@@ -78,6 +80,7 @@ func TestAccountReaderClient_GetAccountBalance(t *testing.T) {
 
 		client := NewAccountReaderClient(server.URL)
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+
 		defer cancel()
 
 		_, err := client.GetAccountBalance(ctx, "USD", "test123")
@@ -241,9 +244,12 @@ func TestAccountReaderClient_ErrorHandling(t *testing.T) {
 }
 
 func TestAccountReaderClient_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
-		json.NewEncoder(w).Encode(&api.Account{})
+
+		err := json.NewEncoder(w).Encode(&api.Account{})
+
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -278,7 +284,7 @@ func TestAccountReaderClient_ContextCancellation(t *testing.T) {
 }
 
 func TestAccountReaderClient_EmptyResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
