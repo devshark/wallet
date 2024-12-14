@@ -71,6 +71,12 @@ func main() {
 	redisClient := redis.NewClient(&config.redisOptions)
 
 	server := rest.NewAPIServer(repo).
+		AddPinger(func(ctx context.Context) error {
+			return db.PingContext(ctx)
+		}).
+		AddPinger(func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
+		}).
 		WithCustomLogger(logger).
 		WithCacheMiddleware(redisClient, cacheExpiry).
 		HTTPServer(config.port, readTimeout, writeTimeout)

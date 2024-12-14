@@ -22,11 +22,13 @@ type APIServer struct {
 	repo        repository.Repository
 	middlewares []middlewares.Middleware
 	logger      *log.Logger
+	pingers     []Pinger
 }
 
 func NewAPIServer(repo repository.Repository) *APIServer {
 	return &APIServer{
 		repo:        repo,
+		pingers:     []Pinger{},
 		logger:      log.Default(),
 		middlewares: make([]middlewares.Middleware, 0, middlewaresInitialCapacity),
 	}
@@ -50,8 +52,9 @@ func (r *APIServer) HTTPServer(port int64, httpReadTimeout, httpWriteTimeout tim
 	mux := http.NewServeMux()
 
 	handler := &Handlers{
-		repo:   r.repo,
-		logger: r.logger,
+		repo:    r.repo,
+		logger:  r.logger,
+		pingers: r.pingers,
 	}
 
 	middlewareChain := middlewares.MiddlewareChain(r.middlewares...)

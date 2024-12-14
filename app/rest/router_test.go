@@ -27,6 +27,24 @@ func TestNewApiServer(t *testing.T) {
 	require.Empty(t, server.middlewares)
 }
 
+func TestNewApiServerWithPinger(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	mockRepo := &repository.MockRepository{}
+	mockPinger := NewMockPinger(t)
+
+	server := NewAPIServer(mockRepo).
+		AddPinger(mockPinger.Execute).
+		AddPinger(mockPinger.Execute).
+		AddPinger(mockPinger.Execute)
+
+	require.NotNil(t, server)
+	require.Equal(t, mockRepo, server.repo)
+	require.NotNil(t, server.logger)
+	require.Empty(t, server.middlewares)
+	require.Len(t, server.pingers, 3)
+}
+
 func TestWithCacheMiddleware(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

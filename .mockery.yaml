@@ -13,3 +13,6 @@ packages:
   github.com/devshark/wallet/pkg/middlewares:
     interfaces:
       GetterAndSetter:
+  github.com/devshark/wallet/app/rest:
+    interfaces:
+      Pinger:

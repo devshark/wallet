@@ -21,19 +21,74 @@ import (
 func TestHandleHealthCheck(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	mockRepo := repository.NewMockRepository(t)
-	handlers := rest.NewRestHandlers(mockRepo)
+	t.Run("OK", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
 
-	req, err := http.NewRequest(http.MethodGet, "/health", nil)
-	require.NoError(t, err)
+		handlers := rest.NewRestHandlers(mockRepo)
 
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handlers.HandleHealthCheck)
+		req, err := http.NewRequest(http.MethodGet, "/health", nil)
+		require.NoError(t, err)
 
-	handler.ServeHTTP(rr, req)
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleHealthCheck)
 
-	require.Equal(t, http.StatusOK, rr.Code)
-	require.Equal(t, "OK", rr.Body.String())
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
+	})
+
+	t.Run("With Pinger OK", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		mockPinger := rest.NewMockPinger(t)
+
+		handlers := rest.NewRestHandlers(mockRepo).
+			AddPinger(mockPinger.Execute).
+			AddPinger(mockPinger.Execute).
+			AddPinger(mockPinger.Execute)
+
+		mockPinger.EXPECT().Execute(mock.Anything).Return(nil).Times(3)
+
+		req, err := http.NewRequest(http.MethodGet, "/health", nil)
+		require.NoError(t, err)
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleHealthCheck)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
+	})
+
+	t.Run("With Pinger Error", func(t *testing.T) {
+		mockRepo := repository.NewMockRepository(t)
+		mockPinger := rest.NewMockPinger(t)
+
+		handlers := rest.NewRestHandlers(mockRepo).
+			AddPinger(mockPinger.Execute).
+			AddPinger(mockPinger.Execute).
+			AddPinger(mockPinger.Execute)
+
+		mockPinger.EXPECT().Execute(mock.Anything).Return(nil).Times(2)
+		mockPinger.EXPECT().Execute(mock.Anything).Return(errors.New("error")).Once()
+
+		req, err := http.NewRequest(http.MethodGet, "/health", nil)
+		require.NoError(t, err)
+
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handlers.HandleHealthCheck)
+
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		var response api.ErrorResponse
+		err = json.Unmarshal(rr.Body.Bytes(), &response)
+		require.NoError(t, err)
+		require.Equal(t, "error", response.Message)
+		require.Equal(t, http.StatusInternalServerError, response.ErrorCode)
+	})
 }
 
 func TestGetAccountBalance(t *testing.T) {

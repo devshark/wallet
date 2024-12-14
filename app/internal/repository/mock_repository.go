@@ -23,9 +23,9 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
-// GetAccountBalance provides a mock function with given fields: ctx, currency, accountId
-func (_m *MockRepository) GetAccountBalance(ctx context.Context, currency string, accountId string) (*api.Account, error) {
-	ret := _m.Called(ctx, currency, accountId)
+// GetAccountBalance provides a mock function with given fields: ctx, currency, accountID
+func (_m *MockRepository) GetAccountBalance(ctx context.Context, currency string, accountID string) (*api.Account, error) {
+	ret := _m.Called(ctx, currency, accountID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetAccountBalance")
@@ -34,10 +34,10 @@ func (_m *MockRepository) GetAccountBalance(ctx context.Context, currency string
 	var r0 *api.Account
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*api.Account, error)); ok {
-		return rf(ctx, currency, accountId)
+		return rf(ctx, currency, accountID)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) *api.Account); ok {
-		r0 = rf(ctx, currency, accountId)
+		r0 = rf(ctx, currency, accountID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*api.Account)
@@ -45,7 +45,7 @@ func (_m *MockRepository) GetAccountBalance(ctx context.Context, currency string
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, currency, accountId)
+		r1 = rf(ctx, currency, accountID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -61,12 +61,12 @@ type MockRepository_GetAccountBalance_Call struct {
 // GetAccountBalance is a helper method to define mock.On call
 //   - ctx context.Context
 //   - currency string
-//   - accountId string
-func (_e *MockRepository_Expecter) GetAccountBalance(ctx interface{}, currency interface{}, accountId interface{}) *MockRepository_GetAccountBalance_Call {
-	return &MockRepository_GetAccountBalance_Call{Call: _e.mock.On("GetAccountBalance", ctx, currency, accountId)}
+//   - accountID string
+func (_e *MockRepository_Expecter) GetAccountBalance(ctx interface{}, currency interface{}, accountID interface{}) *MockRepository_GetAccountBalance_Call {
+	return &MockRepository_GetAccountBalance_Call{Call: _e.mock.On("GetAccountBalance", ctx, currency, accountID)}
 }
 
-func (_c *MockRepository_GetAccountBalance_Call) Run(run func(ctx context.Context, currency string, accountId string)) *MockRepository_GetAccountBalance_Call {
+func (_c *MockRepository_GetAccountBalance_Call) Run(run func(ctx context.Context, currency string, accountID string)) *MockRepository_GetAccountBalance_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})
@@ -83,9 +83,9 @@ func (_c *MockRepository_GetAccountBalance_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
-// GetTransaction provides a mock function with given fields: ctx, txId
-func (_m *MockRepository) GetTransaction(ctx context.Context, txId string) (*api.Transaction, error) {
-	ret := _m.Called(ctx, txId)
+// GetTransaction provides a mock function with given fields: ctx, txID
+func (_m *MockRepository) GetTransaction(ctx context.Context, txID string) (*api.Transaction, error) {
+	ret := _m.Called(ctx, txID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTransaction")
@@ -94,10 +94,10 @@ func (_m *MockRepository) GetTransaction(ctx context.Context, txId string) (*api
 	var r0 *api.Transaction
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string) (*api.Transaction, error)); ok {
-		return rf(ctx, txId)
+		return rf(ctx, txID)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string) *api.Transaction); ok {
-		r0 = rf(ctx, txId)
+		r0 = rf(ctx, txID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*api.Transaction)
@@ -105,7 +105,7 @@ func (_m *MockRepository) GetTransaction(ctx context.Context, txId string) (*api
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, txId)
+		r1 = rf(ctx, txID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -120,12 +120,12 @@ type MockRepository_GetTransaction_Call struct {
 
 // GetTransaction is a helper method to define mock.On call
 //   - ctx context.Context
-//   - txId string
-func (_e *MockRepository_Expecter) GetTransaction(ctx interface{}, txId interface{}) *MockRepository_GetTransaction_Call {
-	return &MockRepository_GetTransaction_Call{Call: _e.mock.On("GetTransaction", ctx, txId)}
+//   - txID string
+func (_e *MockRepository_Expecter) GetTransaction(ctx interface{}, txID interface{}) *MockRepository_GetTransaction_Call {
+	return &MockRepository_GetTransaction_Call{Call: _e.mock.On("GetTransaction", ctx, txID)}
 }
 
-func (_c *MockRepository_GetTransaction_Call) Run(run func(ctx context.Context, txId string)) *MockRepository_GetTransaction_Call {
+func (_c *MockRepository_GetTransaction_Call) Run(run func(ctx context.Context, txID string)) *MockRepository_GetTransaction_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(string))
 	})
@@ -142,9 +142,9 @@ func (_c *MockRepository_GetTransaction_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
-// GetTransactions provides a mock function with given fields: ctx, currency, accountId
-func (_m *MockRepository) GetTransactions(ctx context.Context, currency string, accountId string) ([]*api.Transaction, error) {
-	ret := _m.Called(ctx, currency, accountId)
+// GetTransactions provides a mock function with given fields: ctx, currency, accountID
+func (_m *MockRepository) GetTransactions(ctx context.Context, currency string, accountID string) ([]*api.Transaction, error) {
+	ret := _m.Called(ctx, currency, accountID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTransactions")
@@ -153,10 +153,10 @@ func (_m *MockRepository) GetTransactions(ctx context.Context, currency string, 
 	var r0 []*api.Transaction
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]*api.Transaction, error)); ok {
-		return rf(ctx, currency, accountId)
+		return rf(ctx, currency, accountID)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) []*api.Transaction); ok {
-		r0 = rf(ctx, currency, accountId)
+		r0 = rf(ctx, currency, accountID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*api.Transaction)
@@ -164,7 +164,7 @@ func (_m *MockRepository) GetTransactions(ctx context.Context, currency string, 
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, currency, accountId)
+		r1 = rf(ctx, currency, accountID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -180,12 +180,12 @@ type MockRepository_GetTransactions_Call struct {
 // GetTransactions is a helper method to define mock.On call
 //   - ctx context.Context
 //   - currency string
-//   - accountId string
-func (_e *MockRepository_Expecter) GetTransactions(ctx interface{}, currency interface{}, accountId interface{}) *MockRepository_GetTransactions_Call {
-	return &MockRepository_GetTransactions_Call{Call: _e.mock.On("GetTransactions", ctx, currency, accountId)}
+//   - accountID string
+func (_e *MockRepository_Expecter) GetTransactions(ctx interface{}, currency interface{}, accountID interface{}) *MockRepository_GetTransactions_Call {
+	return &MockRepository_GetTransactions_Call{Call: _e.mock.On("GetTransactions", ctx, currency, accountID)}
 }
 
-func (_c *MockRepository_GetTransactions_Call) Run(run func(ctx context.Context, currency string, accountId string)) *MockRepository_GetTransactions_Call {
+func (_c *MockRepository_GetTransactions_Call) Run(run func(ctx context.Context, currency string, accountID string)) *MockRepository_GetTransactions_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})

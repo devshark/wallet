@@ -7,8 +7,9 @@ import (
 )
 
 type Handlers struct {
-	repo   repository.Repository
-	logger *log.Logger
+	repo    repository.Repository
+	logger  *log.Logger
+	pingers []Pinger
 }
 
 func NewRestHandlers(repo repository.Repository) *Handlers {
