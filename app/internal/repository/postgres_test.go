@@ -769,6 +769,8 @@ func TestConcurrentTransfers(t *testing.T) {
 
 		wg.Wait()
 
+		t.Log("done waiting")
+
 		// Check final balances
 		user1Balance, err := repo.GetAccountBalance(ctx, "USD", "user1")
 		require.NoError(t, err)
@@ -783,4 +785,168 @@ func TestConcurrentTransfers(t *testing.T) {
 		require.True(t, user2Balance.Balance.Equal(expectedUser2Balance),
 			"Expected user2 balance to be %s, but got %s", expectedUser2Balance, user2Balance.Balance)
 	})
+
+	t.Run("Eventual Insufficient Transfer", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Setup initial balances
+		user3Request := api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user3",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "Go Negative",
+		}
+
+		_, err := repo.Transfer(ctx, &user3Request, "go-negative-balance-user3")
+		require.NoError(t, err)
+
+		user4Request := api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user4",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "Go Negative",
+		}
+
+		_, err = repo.Transfer(ctx, &user4Request, "go-negative-balance-user4")
+		require.NoError(t, err)
+
+		// Concurrent transfers
+		concurrency := 10
+		transferAmount := decimal.NewFromFloat(125.00) // will fail after the 8th transfer
+
+		var wg sync.WaitGroup
+
+		wg.Add(concurrency)
+
+		for i := range concurrency {
+			go func() {
+				defer wg.Done()
+
+				// difficult to cherry pick which transfer will fail with insufficient funds, so let's just check the final balance
+				_, _ = repo.Transfer(ctx, &api.TransferRequest{
+					FromAccountID: user3Request.ToAccountID,
+					ToAccountID:   user4Request.ToAccountID,
+					Currency:      user3Request.Currency,
+					Amount:        transferAmount,
+					Remarks:       "TestConcurrentTransfers",
+				}, fmt.Sprintf("concurrent-second-transfer-%s", strconv.Itoa(i)))
+			}()
+		}
+
+		wg.Wait()
+
+		// Check final balances
+		user3Balance, err := repo.GetAccountBalance(ctx, user3Request.Currency, user3Request.ToAccountID)
+		require.NoError(t, err)
+		user4Balance, err := repo.GetAccountBalance(ctx, user4Request.Currency, user4Request.ToAccountID)
+		require.NoError(t, err)
+
+		require.True(t, user3Balance.Balance.IsZero(),
+			"Expected user3 balance to be zero, but got %s", user3Balance.Balance)
+		require.True(t, user4Balance.Balance.Equal(decimal.NewFromInt(2000)),
+			"Expected user4 balance to be 2000, but got %s", user4Balance.Balance)
+	})
+
+	t.Run("Odd Insufficient Transfer", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Setup initial balances
+		user3Request := api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user6",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "Go Negative",
+		}
+
+		_, err := repo.Transfer(ctx, &user3Request, "go-negative-balance-user6")
+		require.NoError(t, err)
+
+		user4Request := api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user7",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(1000.00),
+			Remarks:       "Go Negative",
+		}
+
+		_, err = repo.Transfer(ctx, &user4Request, "go-negative-balance-user7")
+		require.NoError(t, err)
+
+		// Concurrent transfers
+		concurrency := 10
+		transferAmount := decimal.NewFromFloat(123.69) // will have change somewhat
+
+		var wg sync.WaitGroup
+
+		wg.Add(concurrency)
+
+		for i := range concurrency {
+			go func() {
+				defer wg.Done()
+
+				// difficult to cherry pick which transfer will fail with insufficient funds, so let's just check the final balance
+				_, _ = repo.Transfer(ctx, &api.TransferRequest{
+					FromAccountID: user3Request.ToAccountID,
+					ToAccountID:   user4Request.ToAccountID,
+					Currency:      user3Request.Currency,
+					Amount:        transferAmount,
+					Remarks:       "OddTestConcurrentTransfers",
+				}, fmt.Sprintf("concurrent-odd-transfer-%s", strconv.Itoa(i)))
+			}()
+		}
+
+		wg.Wait()
+
+		// Check final balances
+		user3Balance, err := repo.GetAccountBalance(ctx, user3Request.Currency, user3Request.ToAccountID)
+		require.NoError(t, err)
+		user4Balance, err := repo.GetAccountBalance(ctx, user4Request.Currency, user4Request.ToAccountID)
+		require.NoError(t, err)
+
+		require.True(t, user3Balance.Balance.Equal(decimal.NewFromFloat(10.48)),
+			"Expected user3 balance to be zero, but got %s", user3Balance.Balance)
+		require.True(t, user4Balance.Balance.Equal(decimal.NewFromFloat(1989.52)),
+			"Expected user4 balance to be 1989.52, but got %s", user4Balance.Balance)
+	})
+}
+
+func TestDirectQueriesPOC(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupTestDB(t)
+
+	setCleanUp(t, db)
+
+	var err error
+
+	accountID := "blank_user1"
+	currency := "HKD"
+
+	_, err = db.ExecContext(ctx, "insert into accounts (user_id, currency, balance) values($1, $2, 1000);", accountID, currency)
+	require.NoError(t, err)
+
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	var id string
+
+	var balance decimal.Decimal
+
+	err = tx.QueryRowContext(ctx, "select id, balance from accounts where user_id = $1 and currency = $2 FOR NO KEY UPDATE;", accountID, currency).Scan(&id, &balance)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, id)
+	require.True(t, balance.Equal(decimal.NewFromFloat(1000)))
+
+	var newBalance decimal.Decimal
+	err = tx.QueryRowContext(ctx, "update accounts set balance = balance + $1 where user_id = $2 and currency = $3 returning balance", -20, accountID, currency).Scan(&newBalance)
+	require.NoError(t, err)
+
+	require.True(t, balance.Sub(decimal.NewFromInt(20)).Equal(newBalance))
+
+	err = tx.Commit()
+	require.NoError(t, err)
 }
