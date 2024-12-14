@@ -231,7 +231,7 @@ func createTestMigrations(t *testing.T) (string, func()) {
 	require.NoError(t, err)
 
 	upSQL := `CREATE TABLE test_table (id SERIAL PRIMARY KEY, name TEXT);`
-	err = os.WriteFile(filepath.Join(dir, "001_create_test_table_up.sql"), []byte(upSQL), 0644)
+	err = os.WriteFile(filepath.Join(dir, "001_create_test_table.up.sql"), []byte(upSQL), 0644)
 	require.NoError(t, err)
 
 	return dir, func() {

@@ -15,6 +15,15 @@ import (
 
 type GlobFunc func(pattern string) (matches []string, err error)
 
+const (
+	createMigration = `CREATE TABLE IF NOT EXISTS migrations (
+		id SERIAL NOT NULL,
+		name VARCHAR(255) NOT NULL,
+		created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (id)
+	);`
+)
+
 type Migrator struct {
 	db            *sql.DB
 	logger        *log.Logger
@@ -41,7 +50,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 
 	m.createMigrationTable(ctx)
 
-	files, err := m.globFunc(fmt.Sprintf("%s/*_up.sql", m.migrationPath))
+	files, err := m.globFunc(fmt.Sprintf("%s/*.up.sql", m.migrationPath))
 	if err != nil {
 		return err
 	}
@@ -74,13 +83,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 }
 
 func (m *Migrator) createMigrationTable(ctx context.Context) error {
-	_, err := m.db.ExecContext(ctx, `
-	CREATE TABLE IF NOT EXISTS migrations (
-		id SERIAL NOT NULL,
-		name VARCHAR(255) NOT NULL,
-		created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (id)
-	);`)
+	_, err := m.db.ExecContext(ctx, createMigration)
 	if err != nil {
 		return err
 	}
