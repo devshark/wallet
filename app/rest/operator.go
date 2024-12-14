@@ -8,6 +8,10 @@ import (
 	"github.com/devshark/wallet/api"
 )
 
+const (
+	IdempotencyKeyHeader = "X-Idempotency-Key"
+)
+
 func (h *Handlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -21,7 +25,7 @@ func (h *Handlers) HandleDeposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// idempotency key is required
-	idempotencyKey := r.Header.Get("X-Idempotency-Key")
+	idempotencyKey := r.Header.Get(IdempotencyKeyHeader)
 	if idempotencyKey == "" {
 		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 
@@ -91,7 +95,7 @@ func (h *Handlers) HandleWithdrawal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// idempotency key is required
-	idempotencyKey := r.Header.Get("X-Idempotency-Key")
+	idempotencyKey := r.Header.Get(IdempotencyKeyHeader)
 	if idempotencyKey == "" {
 		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 
@@ -162,7 +166,7 @@ func (h *Handlers) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// idempotency key is required
-	idempotencyKey := r.Header.Get("X-Idempotency-Key")
+	idempotencyKey := r.Header.Get(IdempotencyKeyHeader)
 	if idempotencyKey == "" {
 		h.HandleError(w, http.StatusBadRequest, api.ErrMissingIdempotencyKey)
 
