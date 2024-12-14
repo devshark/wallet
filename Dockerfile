@@ -25,5 +25,6 @@ RUN addgroup -S app && adduser -S app -G app
 USER app
 
 COPY --from=builder /app/build/ /app/
+COPY --from=builder /app/migrations/ /app/migrations/
 
 CMD [ "/app/http" ]
