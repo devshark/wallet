@@ -92,15 +92,15 @@ type ErrorResponse struct {
 }
 
 type AccountReader interface {
-	GetAccountBalance(ctx context.Context, currency, accountID string) (Account, error)
-	GetTransaction(ctx context.Context, txID string) (Transaction, error)
-	GetTransactions(ctx context.Context, currency, accountID string) ([]Transaction, error)
+	GetAccountBalance(ctx context.Context, currency, accountID string) (*Account, error)
+	GetTransaction(ctx context.Context, txID string) (*Transaction, error)
+	GetTransactions(ctx context.Context, currency, accountID string) ([]*Transaction, error)
 }
 
 type AccountOperator interface {
-	Deposit(ctx context.Context, request DepositRequest) (Transaction, error)
-	Withdraw(ctx context.Context, request WithdrawRequest) (Transaction, error)
-	Transfer(ctx context.Context, request TransferRequest) (Transaction, error)
+	Deposit(ctx context.Context, request *DepositRequest, idempotencyKey string) (*Transaction, error)
+	Withdraw(ctx context.Context, request *WithdrawRequest, idempotencyKey string) (*Transaction, error)
+	Transfer(ctx context.Context, request *TransferRequest, idempotencyKey string) (*Transaction, error)
 }
 
 func OppositeType(t DebitOrCreditType) DebitOrCreditType {

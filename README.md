@@ -78,6 +78,7 @@ There are some commands prepared for you.
 │   │   ├── migration       --- application logic to migrate database scripts
 │   │   └── repository      --- application logic for all external storage operations
 │   └── rest                --- HTTP handlers to handle and expose RESTful services
+├── client                  --- the client SDK for golang clients
 ├── docker-compose.yaml     --- How to orchestrate the application container with external services
 ├── migrations              --- all SQL files to migrate
 ├── postman                 --- all Postman related files
@@ -109,7 +110,6 @@ I made a few short cuts on the way to save time. A few known are:
 - Minimal input validation
 - Idempotency Key is required from client to avoid double spending. It could have been calculated on the service side, but we lack data algorithm and uniqueness per request, or grace period between similar requests. I consider "Idempotency Key" something similar to nonce, but is transactions-wide instead of source account-based.
 - Some tests that rely on certain queries failing were not covered. I only added tests were database is not accessible to at least cover those scenarios, but it is not enough.
-- I did not write the client SDK, but only the client interfaces. Mostly because it will also require test coverage i.e. takes more time.
 
 ### Table design
 
