@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"testing"
@@ -16,6 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
+
+// simple build-time test to ensure repository.PostgresRepository implements repository.Repository
+func ImplTest() repository.Repository { //nolint:ireturn,nolintlint
+	return &repository.PostgresRepository{}
+}
 
 func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -131,6 +137,8 @@ func setCleanUp(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	t.Cleanup(func() {
+		defer goleak.VerifyNone(t)
+
 		var err error
 
 		defer db.Close()
@@ -143,16 +151,15 @@ func setCleanUp(t *testing.T, db *sql.DB) {
 func TestGetAccountBalance(t *testing.T) {
 	db := setupTestDB(t)
 
-	defer goleak.VerifyNone(t)
+	setCleanUp(t, db)
 
 	repo := repository.NewPostgresRepository(db)
+	repo.WithCustomLogger(log.Default())
 
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
 
 		var err error
-
-		setCleanUp(t, db)
 
 		subject := &api.Account{
 			AccountID: "GetAccountBalance_user1",
@@ -169,12 +176,103 @@ func TestGetAccountBalance(t *testing.T) {
 		require.Equal(t, subject.AccountID, account.AccountID)
 		require.True(t, account.Balance.Equal(decimal.NewFromFloat(100.00)))
 	})
+
+	// no record in db, but can still return 0 for company balance
+	t.Run("Company", func(t *testing.T) {
+		ctx := context.Background()
+
+		var err error
+
+		subject := &api.Account{
+			AccountID: api.CompanyAccountID,
+			Currency:  "USD",
+		}
+
+		account, err := repo.GetAccountBalance(ctx, subject.Currency, subject.AccountID)
+		require.NoError(t, err)
+		require.NotNil(t, account)
+		require.Equal(t, subject.Currency, account.Currency)
+		require.Equal(t, subject.AccountID, account.AccountID)
+		require.True(t, account.Balance.IsZero())
+	})
+}
+
+func TestGetAccountBalanceFail(t *testing.T) {
+	db := setupTestDB(t)
+
+	setCleanUp(t, db)
+
+	repo := repository.NewPostgresRepository(db)
+	repo.WithCustomLogger(log.Default())
+
+	t.Run("Validation Failed", func(t *testing.T) {
+		ctx := context.Background()
+
+		type tSubject struct {
+			expectedError error
+			account       *api.Account
+		}
+
+		subjects := []tSubject{
+			{
+				account: &api.Account{
+					Currency: "USD",
+					Balance:  decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidAccountID,
+			},
+			{
+				account: &api.Account{
+					Currency:  "USD",
+					AccountID: "GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1", // mroe than 255 chars
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidAccountID,
+			},
+			{
+				account: &api.Account{
+					Currency:  "ABCDEFGHIJKL", // more than 10 chars
+					AccountID: "GetTransactions_user1",
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidCurrency,
+			},
+			{
+				account: &api.Account{
+					AccountID: "GetTransactions_user1",
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidCurrency,
+			},
+		}
+
+		for _, subject := range subjects {
+			account, err := repo.GetAccountBalance(ctx, subject.account.Currency, subject.account.AccountID)
+			require.Error(t, err)
+			require.ErrorIs(t, subject.expectedError, err)
+			require.Nil(t, account)
+		}
+	})
+
+	// no record in db and not company should return error
+	t.Run("Account Not Found", func(t *testing.T) {
+		ctx := context.Background()
+
+		subject := &api.Account{
+			AccountID: "randomguy",
+			Currency:  "USD",
+		}
+
+		account, err := repo.GetAccountBalance(ctx, subject.Currency, subject.AccountID)
+		require.Nil(t, account)
+		require.ErrorIs(t, err, api.ErrAccountNotFound)
+	})
 }
 
 func TestGetTransaction(t *testing.T) {
 	db := setupTestDB(t)
 
-	defer goleak.VerifyNone(t)
+	setCleanUp(t, db)
 
 	repo := repository.NewPostgresRepository(db)
 
@@ -182,8 +280,6 @@ func TestGetTransaction(t *testing.T) {
 		ctx := context.Background()
 
 		var err error
-
-		setCleanUp(t, db)
 
 		dummyAccounts := createAccounts(ctx, t, db, 5)
 		dummyTransactions := createTransactions(ctx, t, db, dummyAccounts)
@@ -200,10 +296,101 @@ func TestGetTransaction(t *testing.T) {
 	})
 }
 
-func TestGetTransactions(t *testing.T) {
+func TestGetTransactionFail(t *testing.T) {
 	db := setupTestDB(t)
 
-	defer goleak.VerifyNone(t)
+	setCleanUp(t, db)
+
+	repo := repository.NewPostgresRepository(db)
+	repo.WithCustomLogger(log.Default())
+
+	t.Run("Empty Tx ID", func(t *testing.T) {
+		ctx := context.Background()
+
+		tx, err := repo.GetTransaction(ctx, "")
+		require.Nil(t, tx)
+		require.ErrorIs(t, err, api.ErrInvalidTxID)
+	})
+
+	t.Run("No Record", func(t *testing.T) {
+		ctx := context.Background()
+
+		tx, err := repo.GetTransaction(ctx, "9dbbb6d8-7c13-482b-a381-ac282c52c51e")
+		require.Nil(t, tx)
+		require.ErrorIs(t, err, api.ErrTransactionNotFound)
+	})
+}
+
+func TestGetTransactionsFail(t *testing.T) {
+	db := setupTestDB(t)
+
+	setCleanUp(t, db)
+
+	repo := repository.NewPostgresRepository(db)
+	repo.WithCustomLogger(log.Default())
+
+	t.Run("Validation Failed", func(t *testing.T) {
+		ctx := context.Background()
+
+		type tSubject struct {
+			expectedError error
+			account       *api.Account
+		}
+
+		subjects := []tSubject{
+			{
+				account: &api.Account{
+					Currency: "USD",
+					Balance:  decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidAccountID,
+			},
+			{
+				account: &api.Account{
+					Currency:  "USD",
+					AccountID: "GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1", // mroe than 255 chars
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidAccountID,
+			},
+			{
+				account: &api.Account{
+					Currency:  "ABCDEFGHIJKL", // more than 10 chars
+					AccountID: "GetTransactions_user1",
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidCurrency,
+			},
+			{
+				account: &api.Account{
+					AccountID: "GetTransactions_user1",
+					Balance:   decimal.NewFromFloat(100.00),
+				},
+				expectedError: api.ErrInvalidCurrency,
+			},
+		}
+
+		for _, subject := range subjects {
+			account, err := repo.GetTransactions(ctx, subject.account.Currency, subject.account.AccountID)
+			require.Error(t, err)
+			require.ErrorIs(t, subject.expectedError, err)
+			require.Nil(t, account)
+		}
+	})
+
+	t.Run("No transactions", func(t *testing.T) {
+		ctx := context.Background()
+
+		tx, err := repo.GetTransactions(ctx, "USD", "random-account999")
+		require.NoError(t, err)
+		require.NotNil(t, tx)
+		require.Len(t, tx, 0)
+		require.Empty(t, tx)
+	})
+}
+
+func TestGetTransactions(t *testing.T) {
+	db := setupTestDB(t)
 
 	repo := repository.NewPostgresRepository(db)
 
@@ -240,14 +427,12 @@ func TestGetTransactions(t *testing.T) {
 func TestTransfer(t *testing.T) {
 	db := setupTestDB(t)
 
-	defer goleak.VerifyNone(t)
+	setCleanUp(t, db)
 
 	repo := repository.NewPostgresRepository(db)
 
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
-
-		setCleanUp(t, db)
 
 		request := &api.TransferRequest{
 			FromAccountID: api.CompanyAccountID,
@@ -261,19 +446,283 @@ func TestTransfer(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, txs, 2) // Expecting two transactions for a transfer
 	})
+
+	t.Run("Refund", func(t *testing.T) {
+		ctx := context.Background()
+
+		requests := []*api.TransferRequest{
+			{
+				FromAccountID: api.CompanyAccountID,
+				ToAccountID:   "user2",
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "Test Transfer",
+			},
+			{
+				FromAccountID: "user2",
+				ToAccountID:   api.CompanyAccountID,
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "Refund Transfer",
+			},
+		}
+
+		for i, request := range requests {
+			txs, err := repo.Transfer(ctx, request, "some-idempotency-key-"+strconv.Itoa(i))
+			require.NoError(t, err)
+			require.Len(t, txs, 2) // Expecting two transactions for a transfer
+
+			require.True(t, txs[0].Amount.Equal(txs[1].Amount))
+			require.NotZero(t, txs[0].Amount)
+			require.NotZero(t, txs[1].Amount)
+			require.Equal(t, api.OppositeType(txs[0].Type), txs[1].Type)
+			require.Equal(t, api.OppositeType(txs[1].Type), txs[0].Type)
+			require.NotEmpty(t, txs[0].Remarks)
+			require.NotEmpty(t, txs[1].Remarks)
+			require.Equal(t, txs[0].Remarks, txs[1].Remarks)
+			require.True(t, txs[0].RunningBalance.Equal(txs[1].RunningBalance.Neg()))
+		}
+	})
 }
 
-func TestConcurrentTransfers(t *testing.T) {
+func TestTransferFail(t *testing.T) {
+	db := setupTestDB(t)
+
+	setCleanUp(t, db)
+
+	repo := repository.NewPostgresRepository(db)
+
+	t.Run("Validation Fail", func(t *testing.T) {
+		ctx := context.Background()
+
+		type requestWithError struct {
+			api.TransferRequest
+			expectedError error
+		}
+
+		requests := []*requestWithError{
+			{
+				expectedError: api.ErrInvalidAccountID,
+				TransferRequest: api.TransferRequest{
+					ToAccountID: api.CompanyAccountID,
+					Currency:    "USD",
+					Amount:      decimal.NewFromFloat(100.00),
+					Remarks:     "ErrInvalidAccountID missing from",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidAccountID,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					Currency:      "USD",
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrInvalidAccountID missing to",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidCurrency,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					ToAccountID:   "user2",
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrInvalidCurrency missing",
+				},
+			},
+			{
+				expectedError: api.ErrNegativeAmount,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					ToAccountID:   "user2",
+					Currency:      "USD",
+					Amount:        decimal.NewFromFloat(-100.00),
+					Remarks:       "ErrNegativeAmount",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidAmount,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					ToAccountID:   "user2",
+					Currency:      "USD",
+					Remarks:       "ErrInvalidAmount missing",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidCurrency,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					ToAccountID:   "user2",
+					Currency:      "ABCDEFGHIJKL", // more than 10 chars
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrInvalidCurrency long currency",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidAccountID,
+				TransferRequest: api.TransferRequest{
+					FromAccountID: api.CompanyAccountID,
+					ToAccountID:   "GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1",
+					Currency:      "USD",
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrInvalidAccountID to long",
+				},
+			},
+			{
+				expectedError: api.ErrInvalidAccountID,
+				TransferRequest: api.TransferRequest{
+					ToAccountID:   api.CompanyAccountID,
+					FromAccountID: "GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1GetTransactions_user1",
+					Currency:      "USD",
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrInvalidAccountID from long",
+				},
+			},
+			{
+				expectedError: api.ErrSameAccountIDs,
+				TransferRequest: api.TransferRequest{
+					ToAccountID:   api.CompanyAccountID,
+					FromAccountID: api.CompanyAccountID,
+					Currency:      "USD",
+					Amount:        decimal.NewFromFloat(100.00),
+					Remarks:       "ErrSameAccountIDs",
+				},
+			},
+		}
+
+		for _, request := range requests {
+			txs, err := repo.Transfer(ctx, &request.TransferRequest, "doesnt-matter")
+			require.Error(t, err)
+			require.ErrorIs(t, err, request.expectedError)
+			require.Nil(t, txs)
+		}
+	})
+
+	t.Run("Duplicate Request", func(t *testing.T) {
+		ctx := context.Background()
+
+		request := &api.TransferRequest{
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user2",
+			Currency:      "USD",
+			Amount:        decimal.NewFromFloat(100.00),
+			Remarks:       "TestTransfer",
+		}
+
+		_, err := repo.Transfer(ctx, request, "duplicate-idempotency-key")
+		require.NoError(t, err)
+
+		txs, err := repo.Transfer(ctx, request, "duplicate-idempotency-key")
+		require.Error(t, err)
+		require.ErrorIs(t, err, api.ErrDuplicateTransaction)
+		require.Nil(t, txs)
+	})
+
+	t.Run("Duplicate Idempotency Key", func(t *testing.T) {
+		ctx := context.Background()
+
+		requests := []*api.TransferRequest{
+			{
+				FromAccountID: api.CompanyAccountID,
+				ToAccountID:   "user2",
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "Test Transfer",
+			},
+			{
+				FromAccountID: "user2",
+				ToAccountID:   api.CompanyAccountID,
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "Refund Transfer",
+			},
+		}
+
+		_, err := repo.Transfer(ctx, requests[0], "another-duplicate-idempotency-key")
+		require.NoError(t, err)
+
+		txs, err := repo.Transfer(ctx, requests[1], "another-duplicate-idempotency-key")
+		require.Error(t, err)
+		require.ErrorIs(t, err, api.ErrDuplicateTransaction)
+		require.Nil(t, txs)
+	})
+
+	t.Run("Insufficient Balance", func(t *testing.T) {
+		ctx := context.Background()
+
+		requests := []api.TransferRequest{
+			{
+				FromAccountID: "Insufficient Balance user2",
+				ToAccountID:   "user1",
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "TestTransfer",
+			},
+			{
+				FromAccountID: "Insufficient Balance user1",
+				ToAccountID:   "user2",
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "TestTransfer",
+			},
+			{
+				FromAccountID: "Insufficient Balance user2",
+				ToAccountID:   api.CompanyAccountID,
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "TestTransfer",
+			},
+			{
+				FromAccountID: "Insufficient Balance user1",
+				ToAccountID:   api.CompanyAccountID,
+				Currency:      "USD",
+				Amount:        decimal.NewFromFloat(100.00),
+				Remarks:       "TestTransfer",
+			},
+		}
+
+		for _, request := range requests {
+			txs, err := repo.Transfer(ctx, &request, "insufficient-balance-key")
+			require.Error(t, err)
+			require.ErrorIs(t, err, api.ErrInsufficientBalance)
+			require.Nil(t, txs)
+		}
+	})
+}
+
+func TestTransferFailDBClosed(t *testing.T) {
+	ctx := context.Background()
+
 	defer goleak.VerifyNone(t)
 
 	db := setupTestDB(t)
 
 	repo := repository.NewPostgresRepository(db)
 
+	db.Close()
+
+	request := &api.TransferRequest{
+		FromAccountID: api.CompanyAccountID,
+		ToAccountID:   "user2",
+		Currency:      "USD",
+		Amount:        decimal.NewFromFloat(100.00),
+		Remarks:       "TestTransfer",
+	}
+
+	txs, err := repo.Transfer(ctx, request, "db-error-key")
+	require.Error(t, err)
+	require.ErrorIs(t, err, api.ErrUnhandledDatabaseError)
+	require.Nil(t, txs)
+}
+
+func TestConcurrentTransfers(t *testing.T) {
+	db := setupTestDB(t)
+
+	setCleanUp(t, db)
+
+	repo := repository.NewPostgresRepository(db)
+
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
-
-		setCleanUp(t, db)
 
 		// Setup initial balances
 		_, err := repo.Transfer(ctx, &api.TransferRequest{

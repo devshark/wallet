@@ -97,6 +97,19 @@ I used the `github.com/shopspring/decimal` library as it is the standard for han
 
 To reduce application bloatware, I created my own simple library for reading env variables, instead of libraries like [viper](https://github.com/spf13/viper).
 
+I did not log much, especially for handled validations/errors. I only logged for unexpected errors.
+
+### Short cuts
+
+I made a few short cuts on the way to save time. A few known are:
+
+- exceptional use of //nolint: in places where it makes sense i.e. to validate interface implementations
+- No pagination in transaction history
+- Minimal input validation
+- Idempotency Key is required from client to avoid double spending. It could have been calculated on the service side, but we lack data algorithm and uniqueness per request, or grace period between similar requests. I consider "Idempotency Key" something similar to nonce, but is transactions-wide instead of source account-based.
+- Some tests that rely on certain queries failing were not covered. I only added tests were database is not accessible to at least cover those scenarios, but it is not enough.
+- I did not write the client SDK, but only the client interfaces. Mostly because it will also require test coverage i.e. takes more time.
+
 ### Table design
 
 ```mermaid

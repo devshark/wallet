@@ -94,12 +94,8 @@ func (r *PostgresRepository) GetAccountBalance(ctx context.Context, currency, ac
 		AccountID: strings.TrimSpace(accountID),
 	}
 
-	if account.Currency == "" {
-		return nil, api.ErrInvalidCurrency
-	}
-
-	if account.AccountID == "" {
-		return nil, api.ErrInvalidAccountID
+	if err := validateCurrencyAndAccount(currency, accountID); err != nil {
+		return nil, err
 	}
 
 	// the last transaction for the account currency
@@ -116,14 +112,10 @@ func (r *PostgresRepository) GetAccountBalance(ctx context.Context, currency, ac
 			}, nil
 		}
 
-		return account, fmt.Errorf("failed to get account balance: %s: %w", err.Error(), api.ErrAccountNotFound)
+		return nil, fmt.Errorf("failed to get account balance for %s: %s: %w", account.AccountID, err.Error(), api.ErrAccountNotFound)
 	}
 
 	return account, nil
-}
-
-type DBOrTxType interface {
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
 func (r *PostgresRepository) GetTransaction(ctx context.Context, txID string) (*api.Transaction, error) {
@@ -149,20 +141,13 @@ func (r *PostgresRepository) GetTransaction(ctx context.Context, txID string) (*
 }
 
 func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, accountID string) ([]*api.Transaction, error) {
-	if currency == "" {
-		return nil, api.ErrInvalidCurrency
-	}
-
-	if accountID == "" {
-		return nil, api.ErrInvalidAccountID
+	err := validateCurrencyAndAccount(currency, accountID)
+	if err != nil {
+		return nil, err
 	}
 
 	rows, err := r.db.QueryContext(ctx, selectTransactions, currency, accountID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
-		}
-
 		return nil, formatUnknownError(err)
 	}
 
@@ -175,10 +160,6 @@ func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, acco
 
 		err = rows.Scan(&tx.TxID, &tx.AccountID, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
-			}
-
 			return nil, formatUnknownError(err)
 		}
 
@@ -186,10 +167,6 @@ func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, acco
 	}
 
 	if err = rows.Err(); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
-		}
-
 		return nil, formatUnknownError(err)
 	}
 
@@ -203,20 +180,20 @@ func (r *PostgresRepository) Transfer(ctx context.Context, request *api.Transfer
 
 	var err error
 
-	if request.Currency == "" {
-		return nil, api.ErrInvalidCurrency
+	if err = validateCurrencyAndAccount(request.Currency, request.FromAccountID); err != nil {
+		return nil, err
 	}
 
-	if request.FromAccountID == "" {
-		return nil, api.ErrInvalidAccountID
-	}
-
-	if request.ToAccountID == "" {
-		return nil, api.ErrInvalidAccountID
+	if err = validateCurrencyAndAccount(request.Currency, request.ToAccountID); err != nil {
+		return nil, err
 	}
 
 	if strings.EqualFold(request.FromAccountID, request.ToAccountID) {
 		return nil, api.ErrSameAccountIDs
+	}
+
+	if request.Amount.IsZero() {
+		return nil, api.ErrInvalidAmount
 	}
 
 	if request.Amount.IsNegative() {
@@ -277,6 +254,18 @@ func (r *PostgresRepository) Transfer(ctx context.Context, request *api.Transfer
 	}
 
 	return txs, nil
+}
+
+func validateCurrencyAndAccount(currency, accountID string) error {
+	if currency == "" || len(currency) > 10 {
+		return api.ErrInvalidCurrency
+	}
+
+	if accountID == "" || len(accountID) > 255 {
+		return api.ErrInvalidAccountID
+	}
+
+	return nil
 }
 
 func formatUnknownError(err error) error {

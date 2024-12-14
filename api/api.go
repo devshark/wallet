@@ -102,3 +102,11 @@ type AccountOperator interface {
 	Withdraw(ctx context.Context, request WithdrawRequest) (Transaction, error)
 	Transfer(ctx context.Context, request TransferRequest) (Transaction, error)
 }
+
+func OppositeType(t DebitOrCreditType) DebitOrCreditType {
+	if t == CREDIT {
+		return DEBIT
+	}
+
+	return CREDIT
+}
