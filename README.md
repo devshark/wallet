@@ -3,9 +3,9 @@
 Wallet as a service
 
 [![Build Image](https://github.com/devshark/wallet/actions/workflows/build-image.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/build-image.yaml)
-[![Run Tests](https://github.com/devshark/wallet/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/run-tests.yaml)
-[![Run Integration Tests](https://github.com/devshark/wallet/actions/workflows/run-integration-test.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/run-integration-test.yaml)
-[![Run Linter](https://github.com/devshark/wallet/actions/workflows/linter.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/linter.yaml)
+[![Tests](https://github.com/devshark/wallet/actions/workflows/tests.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/tests.yaml)
+[![Integration Tests](https://github.com/devshark/wallet/actions/workflows/integration-test.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/integration-test.yaml)
+[![Go Linter](https://github.com/devshark/wallet/actions/workflows/linter.yaml/badge.svg)](https://github.com/devshark/wallet/actions/workflows/linter.yaml)
 
 ## Features
 
