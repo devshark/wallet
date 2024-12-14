@@ -67,6 +67,24 @@ There are some commands prepared for you.
 
 `make lint` proxy of `golangci-lint run`
 
+## Application structure
+
+```code
+├── Dockerfile              --- contains the application build instructions
+├── api                     --- core interfaces for internal and external clients to use
+├── app                     --- all application codes
+│   ├── cmd                 --- entrypoint of the application
+│   ├── internal            --- all non-shareable components of the application
+│   │   ├── migration       --- application logic to migrate database scripts
+│   │   └── repository      --- application logic for all external storage operations
+│   └── rest                --- HTTP handlers to handle and expose RESTful services
+├── docker-compose.yaml     --- How to orchestrate the application container with external services
+├── migrations              --- all SQL files to migrate
+├── pkg                     --- external, shareable libraries
+│   ├── env                 --- libraries to read env variables
+│   └── middlewares         --- libraries for http middlewares
+```
+
 ## Design decisions
 
 ### Development
@@ -77,7 +95,32 @@ I made my own database script migration logic, which usually comes from ORMs. I 
 
 I used the `github.com/shopspring/decimal` library as it is the standard for handling types that may need increased floating precision and [mathematical operations](https://0.30000000000000004.com/).
 
+To reduce application bloatware, I created my own simple library for reading env variables, instead of libraries like [viper](https://github.com/spf13/viper).
+
 ### Table design
+
+```mermaid
+erDiagram
+    ACCOUNTS ||--o{ TRANSACTIONS : has
+    ACCOUNTS {
+        UUID id PK
+        String user_id "based on user input"
+        String currency "any denomination"
+        Numeric balance "double precision number, account balance"
+        Time created_at "when the account was created"
+        Time updated_at "when the account was updated i.e. balance"
+    }
+    TRANSACTIONS {
+        UUID id PK
+        UUID account_id FK "owned by Account"
+        Numeric amount "double precision number, transaction amount"
+        DebitCredit debit_credit "'DEBIT' or 'CREDIT'"
+        String group_id "used as the idempotency key, identified transaction pair"
+        String description "any text"
+        Time created_at "when the transaction was created"
+        Time updated_at "when the transaction was updated (not applicable for now)"
+    }
+```
 
 I created two tables, accounts and transactions, to group related information such as currency and balance into accounts, and transactions details like amount, account id, timestamps.
 

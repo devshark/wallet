@@ -42,12 +42,10 @@ EXECUTE FUNCTION update_modified_column();
 CREATE TABLE IF NOT EXISTS public."transactions" (
     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     "account_id" UUID NOT NULL,
-    -- "currency" VARCHAR(3) NOT NULL,
     "amount" NUMERIC NOT NULL,
     "debit_credit" "DebitCredit" NOT NULL,
     "group_id" VARCHAR(50) NOT NULL, -- Used for idempotency
     "description" VARCHAR(255),
-    -- "balance" NUMERIC,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
