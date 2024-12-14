@@ -28,7 +28,7 @@ func (h *Handlers) GetAccountBalance(w http.ResponseWriter, r *http.Request) {
 
 	account, err := h.repo.GetAccountBalance(ctx, currency, accountID)
 	if errors.Is(err, api.ErrAccountNotFound) {
-		h.HandleError(w, http.StatusNotFound, err)
+		h.HandleError(w, http.StatusNotFound, api.ErrAccountNotFound)
 
 		return
 	}

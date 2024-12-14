@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -75,7 +76,7 @@ func TestGetAccountBalance(t *testing.T) {
 		mockRepo := repository.NewMockRepository(t)
 		handlers := rest.NewRestHandlers(mockRepo)
 
-		mockRepo.EXPECT().GetAccountBalance(mock.Anything, "USD", "user1").Return(nil, api.ErrAccountNotFound)
+		mockRepo.EXPECT().GetAccountBalance(mock.Anything, "USD", "user1").Return(nil, fmt.Errorf("something something: %w", api.ErrAccountNotFound))
 
 		req, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(t, err)

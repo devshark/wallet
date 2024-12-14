@@ -80,6 +80,7 @@ There are some commands prepared for you.
 │   └── rest                --- HTTP handlers to handle and expose RESTful services
 ├── docker-compose.yaml     --- How to orchestrate the application container with external services
 ├── migrations              --- all SQL files to migrate
+├── postman                 --- all Postman related files
 ├── pkg                     --- external, shareable libraries
 │   ├── env                 --- libraries to read env variables
 │   └── middlewares         --- libraries for http middlewares
