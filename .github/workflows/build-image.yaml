@@ -1,0 +1,23 @@
+name: Build Image
+
+on:
+  push:
+    branches:
+      - "*"
+      # we can limit to build on release branches only
+      # - 'release/**'
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  test:
+    name: Build Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Build the Docker image
+        run: docker build . --tag wallet:latest
