@@ -18,7 +18,7 @@ services:
       POSTGRES_DATABASE: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      REDIS_ADDRESS: localhost:6379
+      REDIS_ADDRESS: redis:6379
     ports:
       - ${DOCKER_PUBLISH_IP:-127.0.0.1}:8080:8080
     restart: unless-stopped

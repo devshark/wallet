@@ -61,7 +61,7 @@ func (r *APIServer) HTTPServer(port int64, httpReadTimeout, httpWriteTimeout tim
 	// don't cache account balance, as it may change frequently
 	mux.HandleFunc("GET /account/{accountId}/{currency}", (handler.GetAccountBalance))
 	// only cache transactions, as they are fixed
-	mux.HandleFunc("GET /transactions/{accountId}/{currency}", middlewareChain(handler.GetTransactions))
+	mux.HandleFunc("GET /transactions/{accountId}/{currency}", (handler.GetTransactions))
 	mux.HandleFunc("GET /transactions/{txId}", middlewareChain(handler.GetTransaction))
 
 	// don't cache mutable endpoints

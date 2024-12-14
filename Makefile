@@ -22,7 +22,8 @@ run-server:
 	POSTGRES_USER=postgres \
 	POSTGRES_PASSWORD=postgres \
 	POSTGRES_DATABASE=postgres \
-	REDIS_ADDRESS=localhost:6389 go run app/cmd/main.go
+	REDIS_ADDRESS=localhost:6389 \
+	PORT=8080 go run app/cmd/main.go
 
 run-build: build
 	POSTGRES_HOST=localhost \
@@ -30,7 +31,8 @@ run-build: build
 	POSTGRES_USER=postgres \
 	POSTGRES_PASSWORD=postgres \
 	POSTGRES_DATABASE=postgres \
-	REDIS_ADDRESS=localhost:6389 ./build/http
+	REDIS_ADDRESS=localhost:6389 \
+	PORT=8080 ./build/http
 
 lint:
 	golangci-lint run
