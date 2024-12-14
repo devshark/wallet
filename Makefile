@@ -1,4 +1,4 @@
-.PHONY: vendor build test short-test run-server run-build
+.PHONY: vendor build test short-test run-server run-build lint
 
 vendor:
 	go mod tidy && go mod vendor
@@ -31,3 +31,6 @@ run-build: build
 	POSTGRES_PASSWORD=postgres \
 	POSTGRES_DATABASE=postgres \
 	REDIS_ADDRESS=localhost:6389 ./build/http
+
+lint:
+	golangci-lint run

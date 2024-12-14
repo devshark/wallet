@@ -66,111 +66,131 @@ const (
 		RETURNING id, balance;`
 )
 
-func NewPostgresRepository(db *sql.DB) Repository {
+const (
+	// because it isn't simple to know the number of rows in the result, we will initiate the slice with 10 capacity
+	// we will not need this if we implement a proper pagination, but we aim to only deliver a simplified version.
+	defaultTransactionSliceCapacity = 10
+
+	// we know for certain that double-entry transactions always have exactly 2 records
+	transactionPairCapacity = 2
+)
+
+func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{
 		db:     db,
 		logger: log.Default(),
 	}
 }
 
-func (r *PostgresRepository) WithCustomLogger(logger *log.Logger) Repository {
+func (r *PostgresRepository) WithCustomLogger(logger *log.Logger) *PostgresRepository {
 	r.logger = logger
+
 	return r
 }
 
-func (r *PostgresRepository) GetAccountBalance(ctx context.Context, currency, accountId string) (*api.Account, error) {
-	return r.getAccountBalance(ctx, r.db, currency, accountId)
-}
-
-type DbOrTxType interface {
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
-}
-
-func (r *PostgresRepository) getAccountBalance(ctx context.Context, dbOrTx DbOrTxType, currency, accountId string) (*api.Account, error) {
+func (r *PostgresRepository) GetAccountBalance(ctx context.Context, currency, accountID string) (*api.Account, error) {
 	account := &api.Account{
 		Currency:  strings.ToUpper(strings.TrimSpace(currency)),
-		AccountId: strings.TrimSpace(accountId),
+		AccountID: strings.TrimSpace(accountID),
 	}
 
 	if account.Currency == "" {
 		return nil, api.ErrInvalidCurrency
 	}
 
-	if account.AccountId == "" {
-		return nil, api.ErrInvalidAccountId
+	if account.AccountID == "" {
+		return nil, api.ErrInvalidAccountID
 	}
 
 	// the last transaction for the account currency
-	row := dbOrTx.QueryRowContext(ctx, selectAccountBalance, account.Currency, account.AccountId)
+	row := r.db.QueryRowContext(ctx, selectAccountBalance, account.Currency, account.AccountID)
 
 	err := row.Scan(&account.Balance)
 	if err != nil {
 		// if the account is the company account, the initial balance must be 0
-		if errors.Is(err, sql.ErrNoRows) && strings.EqualFold(account.AccountId, api.COMPANY_ACCOUNT_ID) {
+		if errors.Is(err, sql.ErrNoRows) && strings.EqualFold(account.AccountID, api.CompanyAccountID) {
 			return &api.Account{
 				Currency:  account.Currency,
-				AccountId: account.AccountId,
+				AccountID: account.AccountID,
 				Balance:   decimal.NewFromInt(0),
 			}, nil
 		}
-		return account, fmt.Errorf("failed to get account balance: %v: %w", err, api.ErrAccountNotFound)
+
+		return account, fmt.Errorf("failed to get account balance: %s: %w", err.Error(), api.ErrAccountNotFound)
 	}
 
 	return account, nil
 }
 
-func (r *PostgresRepository) GetTransaction(ctx context.Context, txId string) (*api.Transaction, error) {
-	txId = strings.TrimSpace(txId)
-	if txId == "" {
+type DBOrTxType interface {
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+}
+
+func (r *PostgresRepository) GetTransaction(ctx context.Context, txID string) (*api.Transaction, error) {
+	txID = strings.TrimSpace(txID)
+	if txID == "" {
 		return nil, api.ErrInvalidTxID
 	}
 
-	row := r.db.QueryRowContext(ctx, selectTransaction, txId)
+	row := r.db.QueryRowContext(ctx, selectTransaction, txID)
 
 	tx := &api.Transaction{}
-	err := row.Scan(&tx.TxID, &tx.AccountId, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
+
+	err := row.Scan(&tx.TxID, &tx.AccountID, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to get transaction: %v: %w", err, api.ErrTransactionNotFound)
+			return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
 		}
-		return nil, err
+
+		return nil, formatUnknownError(err)
 	}
 
 	return tx, nil
 }
 
-func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, accountId string) ([]*api.Transaction, error) {
+func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, accountID string) ([]*api.Transaction, error) {
 	if currency == "" {
 		return nil, api.ErrInvalidCurrency
 	}
 
-	if accountId == "" {
-		return nil, api.ErrInvalidAccountId
+	if accountID == "" {
+		return nil, api.ErrInvalidAccountID
 	}
 
-	rows, err := r.db.QueryContext(ctx, selectTransactions, currency, accountId)
+	rows, err := r.db.QueryContext(ctx, selectTransactions, currency, accountID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to get transaction: %v: %w", err, api.ErrTransactionNotFound)
+			return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
 		}
-		return nil, err
+
+		return nil, formatUnknownError(err)
 	}
 
 	defer rows.Close()
 
-	var transactions []*api.Transaction
+	transactions := make([]*api.Transaction, 0, defaultTransactionSliceCapacity)
+
 	for rows.Next() {
 		tx := &api.Transaction{}
 
-		err := rows.Scan(&tx.TxID, &tx.AccountId, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
+		err = rows.Scan(&tx.TxID, &tx.AccountID, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("failed to get transaction: %v: %w", err, api.ErrTransactionNotFound)
+				return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
 			}
-			return nil, err
+
+			return nil, formatUnknownError(err)
 		}
 
 		transactions = append(transactions, tx)
+	}
+
+	if err = rows.Err(); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("failed to get transaction: %s: %w", err.Error(), api.ErrTransactionNotFound)
+		}
+
+		return nil, formatUnknownError(err)
 	}
 
 	return transactions, nil
@@ -178,23 +198,25 @@ func (r *PostgresRepository) GetTransactions(ctx context.Context, currency, acco
 
 func (r *PostgresRepository) Transfer(ctx context.Context, request *api.TransferRequest, idempotencyKey string) ([]*api.Transaction, error) {
 	request.Currency = strings.ToUpper(strings.TrimSpace(request.Currency))
-	request.FromAccountId = strings.TrimSpace(request.FromAccountId)
-	request.ToAccountId = strings.TrimSpace(request.ToAccountId)
+	request.FromAccountID = strings.TrimSpace(request.FromAccountID)
+	request.ToAccountID = strings.TrimSpace(request.ToAccountID)
+
+	var err error
 
 	if request.Currency == "" {
 		return nil, api.ErrInvalidCurrency
 	}
 
-	if request.FromAccountId == "" {
-		return nil, api.ErrInvalidAccountId
+	if request.FromAccountID == "" {
+		return nil, api.ErrInvalidAccountID
 	}
 
-	if request.ToAccountId == "" {
-		return nil, api.ErrInvalidAccountId
+	if request.ToAccountID == "" {
+		return nil, api.ErrInvalidAccountID
 	}
 
-	if strings.EqualFold(request.FromAccountId, request.ToAccountId) {
-		return nil, api.ErrSameAccountIds
+	if strings.EqualFold(request.FromAccountID, request.ToAccountID) {
+		return nil, api.ErrSameAccountIDs
 	}
 
 	if request.Amount.IsNegative() {
@@ -203,17 +225,19 @@ func (r *PostgresRepository) Transfer(ctx context.Context, request *api.Transfer
 
 	// check if the tx already exists
 	existingTx := r.db.QueryRowContext(ctx, selectGroupExists, idempotencyKey)
+
 	var existingCount int
-	err := existingTx.Scan(&existingCount)
+
+	err = existingTx.Scan(&existingCount)
 	if err != nil {
-		return nil, err
+		return nil, formatUnknownError(err)
 	}
 
 	if existingCount > 0 {
 		return nil, api.ErrDuplicateTransaction
 	}
 
-	fromAccountDbId, toAccountDbId, err := getAccountDbIds(ctx, r.db, request)
+	fromAccountDatabaseID, toAccountDatabaseID, err := getAccountDatabaseIDs(ctx, r.db, request)
 	if err != nil { // may include api.ErrInsufficientBalance
 		return nil, err
 	}
@@ -221,30 +245,33 @@ func (r *PostgresRepository) Transfer(ctx context.Context, request *api.Transfer
 	// start of the transaction
 	tx, err := r.db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, formatUnknownError(err)
 	}
 
-	if err := lockAccounts(ctx, tx, request); err != nil {
+	if err = lockAccounts(ctx, tx, request); err != nil {
 		_ = tx.Rollback()
+
 		return nil, err
 	}
 
-	newTxIdFromTransfer, newTxIdToTransfer, err := createDoubleEntry(ctx, tx, request, fromAccountDbId, toAccountDbId, idempotencyKey)
+	newTxIDFromTransfer, newTxIDToTransfer, err := createDoubleEntry(ctx, tx, request, fromAccountDatabaseID, toAccountDatabaseID, idempotencyKey)
 	if err != nil {
 		_ = tx.Rollback()
+
 		return nil, err
 	}
 
-	if err := updateBalances(ctx, tx, request); err != nil {
+	if err = updateBalances(ctx, tx, request); err != nil {
 		_ = tx.Rollback()
+
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	if err = tx.Commit(); err != nil {
+		return nil, formatUnknownError(err)
 	}
 
-	txs, err := r.getTransactionsByIds(ctx, newTxIdFromTransfer, newTxIdToTransfer)
+	txs, err := r.getTransactionsByIDs(ctx, newTxIDFromTransfer, newTxIDToTransfer)
 	if err != nil {
 		return nil, err
 	}
@@ -252,30 +279,35 @@ func (r *PostgresRepository) Transfer(ctx context.Context, request *api.Transfer
 	return txs, nil
 }
 
+func formatUnknownError(err error) error {
+	return fmt.Errorf("%w: %w", api.ErrUnhandledDatabaseError, err)
+}
+
 // Create new double entry transactions of from and to accounts, respectively.
-func createDoubleEntry(ctx context.Context, tx *sql.Tx, request *api.TransferRequest, fromAccountDbId, toAccountDbId, idempotencyKey string) (string, string, error) {
+func createDoubleEntry(ctx context.Context, tx *sql.Tx, request *api.TransferRequest, fromAccountDatabaseID, toAccountDatabaseID, idempotencyKey string) (string, string, error) {
 	// Prepare the reusable statement for optimized performance of repeated queries.
 	newTxStatement, err := tx.PrepareContext(ctx, insertStatement)
 	if err != nil {
-		_ = tx.Rollback()
-		return "", "", err
+		return "", "", formatUnknownError(err)
 	}
 
 	defer newTxStatement.Close()
 
-	var newIdFromAccount string
-	err = newTxStatement.QueryRowContext(ctx, fromAccountDbId, request.Amount, api.DEBIT, request.Remarks, idempotencyKey).Scan(&newIdFromAccount)
+	var newIDFromAccount string
+
+	err = newTxStatement.QueryRowContext(ctx, fromAccountDatabaseID, request.Amount, api.DEBIT, request.Remarks, idempotencyKey).Scan(&newIDFromAccount)
 	if err != nil {
-		return "", "", err
+		return "", "", formatUnknownError(err)
 	}
 
-	var newIdToAccount string
-	err = newTxStatement.QueryRowContext(ctx, toAccountDbId, request.Amount, api.CREDIT, request.Remarks, idempotencyKey).Scan(&newIdToAccount)
+	var newIDToAccount string
+
+	err = newTxStatement.QueryRowContext(ctx, toAccountDatabaseID, request.Amount, api.CREDIT, request.Remarks, idempotencyKey).Scan(&newIDToAccount)
 	if err != nil {
-		return "", "", err
+		return "", "", formatUnknownError(err)
 	}
 
-	return newIdFromAccount, newIdToAccount, nil
+	return newIDFromAccount, newIDToAccount, nil
 }
 
 // Updates balances for both sides of the account.
@@ -283,17 +315,19 @@ func updateBalances(ctx context.Context, tx *sql.Tx, request *api.TransferReques
 	// Prepare the reusable statement for optimized performance of repeated queries.
 	updateBalanceStatement, err := tx.PrepareContext(ctx, updateAccountBalance)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
-	_, err = updateBalanceStatement.ExecContext(ctx, request.Amount.Neg(), request.FromAccountId, request.Currency)
+	defer updateBalanceStatement.Close()
+
+	_, err = updateBalanceStatement.ExecContext(ctx, request.Amount.Neg(), request.FromAccountID, request.Currency)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
-	_, err = updateBalanceStatement.ExecContext(ctx, request.Amount, request.ToAccountId, request.Currency)
+	_, err = updateBalanceStatement.ExecContext(ctx, request.Amount, request.ToAccountID, request.Currency)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
 	return nil
@@ -304,17 +338,19 @@ func lockAccounts(ctx context.Context, tx *sql.Tx, request *api.TransferRequest)
 	// Prepare the reusable statement for optimized performance of repeated queries.
 	lockStatement, err := tx.PrepareContext(ctx, selectLockAccount)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
-	_, err = lockStatement.ExecContext(ctx, request.FromAccountId, request.Currency)
+	defer lockStatement.Close()
+
+	_, err = lockStatement.ExecContext(ctx, request.FromAccountID, request.Currency)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
-	_, err = lockStatement.ExecContext(ctx, request.ToAccountId, request.Currency)
+	_, err = lockStatement.ExecContext(ctx, request.ToAccountID, request.Currency)
 	if err != nil {
-		return err
+		return formatUnknownError(err)
 	}
 
 	return nil
@@ -322,23 +358,25 @@ func lockAccounts(ctx context.Context, tx *sql.Tx, request *api.TransferRequest)
 
 // Upsert ensures the account exists before we lock them. Returns the db ids of from and to accounts, respectively.
 // May throw db errors or api.ErrInsufficientBalance if applicable.
-func getAccountDbIds(ctx context.Context, db *sql.DB, request *api.TransferRequest) (string, string, error) {
+func getAccountDatabaseIDs(ctx context.Context, db *sql.DB, request *api.TransferRequest) (string, string, error) {
 	// Prepare the reusable statement for optimized performance.
 	upsertAccountStatement, err := db.PrepareContext(ctx, upsertAccount)
 	if err != nil {
-		return "", "", err
+		return "", "", formatUnknownError(err)
 	}
 
 	defer upsertAccountStatement.Close()
 
 	// Upsert the source account
-	var fromAccountDbId string
+	var fromAccountDatabaseID string
+
 	var fromAccountBalance decimal.Decimal
-	if err := upsertAccountStatement.QueryRowContext(ctx, request.FromAccountId, request.Currency).Scan(&fromAccountDbId, &fromAccountBalance); err != nil {
-		return "", "", err
+
+	if err := upsertAccountStatement.QueryRowContext(ctx, request.FromAccountID, request.Currency).Scan(&fromAccountDatabaseID, &fromAccountBalance); err != nil {
+		return "", "", formatUnknownError(err)
 	}
 
-	allowNegative := strings.EqualFold(request.FromAccountId, api.COMPANY_ACCOUNT_ID)
+	allowNegative := strings.EqualFold(request.FromAccountID, api.CompanyAccountID)
 	// check if the from account has enough balance.
 	// but allow negative balance for company account.
 	if fromAccountBalance.LessThan(request.Amount) && !allowNegative {
@@ -346,51 +384,41 @@ func getAccountDbIds(ctx context.Context, db *sql.DB, request *api.TransferReque
 	}
 
 	// Upsert the destination account
-	var toAccountDbId string
+	var toAccountDatabaseID string
+
 	var toAccountBalance decimal.Decimal
-	if err := upsertAccountStatement.QueryRowContext(ctx, request.ToAccountId, request.Currency).Scan(&toAccountDbId, &toAccountBalance); err != nil {
-		return "", "", err
+
+	if err := upsertAccountStatement.QueryRowContext(ctx, request.ToAccountID, request.Currency).Scan(&toAccountDatabaseID, &toAccountBalance); err != nil {
+		return "", "", formatUnknownError(err)
 	}
 
-	return fromAccountDbId, toAccountDbId, nil
+	return fromAccountDatabaseID, toAccountDatabaseID, nil
 }
 
-func (r *PostgresRepository) lockAccountAndGetLatestBalance(ctx context.Context, tx *sql.Tx, currency, accountId string) *api.Account {
-	_, _ = tx.ExecContext(ctx, selectLockAccount, currency, accountId)
-	// result.LastInsertId()
-
-	// account, err := r.getAccountBalance(ctx, tx, currency, accountId)
-	account, err := r.GetAccountBalance(ctx, currency, accountId)
-	if errors.Is(err, api.ErrAccountNotFound) {
-		account.Balance = decimal.NewFromInt(0)
-		return account
-	}
-
+func (r *PostgresRepository) getTransactionsByIDs(ctx context.Context, txID1, txID2 string) ([]*api.Transaction, error) {
+	transactions, err := r.db.QueryContext(ctx, selectTransactionPair, txID1, txID2)
 	if err != nil {
-		return nil
-	}
-
-	return account
-}
-
-func (r *PostgresRepository) getTransactionsByIds(ctx context.Context, txId1, txId2 string) ([]*api.Transaction, error) {
-	transactions, err := r.db.QueryContext(ctx, selectTransactionPair, txId1, txId2)
-	if err != nil {
-		return nil, err
+		return nil, formatUnknownError(err)
 	}
 
 	defer transactions.Close()
 
 	// there are exactly 2 entries produced by every transfer
-	txs := make([]*api.Transaction, 0, 2)
+	txs := make([]*api.Transaction, 0, transactionPairCapacity)
+
 	for transactions.Next() {
 		var tx api.Transaction
-		err = transactions.Scan(&tx.TxID, &tx.AccountId, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
+
+		err = transactions.Scan(&tx.TxID, &tx.AccountID, &tx.Currency, &tx.Amount, &tx.Type, &tx.RunningBalance, &tx.Remarks, &tx.Time)
 		if err != nil {
-			return nil, err
+			return nil, formatUnknownError(err)
 		}
 
 		txs = append(txs, &tx)
+	}
+
+	if err = transactions.Err(); err != nil {
+		return nil, formatUnknownError(err)
 	}
 
 	return txs, nil

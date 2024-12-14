@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewRestApiServer(t *testing.T) {
+func TestNewApiServer(t *testing.T) {
 	mockRepo := &repository.MockRepository{}
-	server := NewRestApiServer(mockRepo)
+	server := NewAPIServer(mockRepo)
 
 	require.NotNil(t, server)
 	require.Equal(t, mockRepo, server.repo)
@@ -26,7 +26,7 @@ func TestNewRestApiServer(t *testing.T) {
 
 func TestWithCacheMiddleware(t *testing.T) {
 	mockRepo := &repository.MockRepository{}
-	server := NewRestApiServer(mockRepo)
+	server := NewAPIServer(mockRepo)
 
 	mockRedisClient := &redis.Client{}
 	expiration := 5 * time.Minute
@@ -39,7 +39,7 @@ func TestWithCacheMiddleware(t *testing.T) {
 
 func TestWithCustomLogger(t *testing.T) {
 	mockRepo := &repository.MockRepository{}
-	server := NewRestApiServer(mockRepo)
+	server := NewAPIServer(mockRepo)
 
 	customLogger := log.New(os.Stdout, "TEST: ", log.Ldate|log.Ltime|log.Lshortfile)
 	updatedServer := server.WithCustomLogger(customLogger)
@@ -50,13 +50,13 @@ func TestWithCustomLogger(t *testing.T) {
 
 func TestHttpServer(t *testing.T) {
 	mockRepo := &repository.MockRepository{}
-	server := NewRestApiServer(mockRepo)
+	server := NewAPIServer(mockRepo)
 
 	port := int64(8080)
 	readTimeout := 5 * time.Second
 	writeTimeout := 10 * time.Second
 
-	httpServer := server.HttpServer(port, readTimeout, writeTimeout)
+	httpServer := server.HTTPServer(port, readTimeout, writeTimeout)
 
 	require.NotNil(t, httpServer)
 	require.Equal(t, fmt.Sprintf(":%d", port), httpServer.Addr)
@@ -68,7 +68,7 @@ func TestHttpServer(t *testing.T) {
 	require.True(t, ok)
 
 	// You can test individual routes if needed, for example:
-	healthHandler, pattern := mux.Handler(httptest.NewRequest("GET", "/health", nil))
+	healthHandler, pattern := mux.Handler(httptest.NewRequest(http.MethodGet, "/health", nil))
 	require.NotNil(t, healthHandler)
 	require.NotNil(t, pattern)
 	require.NotEmpty(t, pattern)

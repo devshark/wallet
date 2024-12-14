@@ -9,6 +9,7 @@ func MiddlewareChain(middlewares ...Middleware) Middleware {
 		for _, mw := range middlewares {
 			handler = mw(handler)
 		}
+
 		return handler
 	}
 }

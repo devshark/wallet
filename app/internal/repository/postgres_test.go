@@ -11,13 +11,14 @@ import (
 	"github.com/devshark/wallet/api"
 	"github.com/devshark/wallet/app/internal/migration"
 	"github.com/devshark/wallet/app/internal/repository"
+	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
-
-	_ "github.com/lib/pq"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("Skipping test in short mode, as it requires a database")
 	}
@@ -35,37 +36,37 @@ func setupTestDB(t *testing.T) *sql.DB {
 }
 
 type dummyAccount struct {
-	accountId string
-	userId    string
+	accountID string
+	userID    string
 }
 
 type dummyTransaction struct {
-	transactionId string
+	transactionID string
 }
 
-func createAccount(t *testing.T, ctx context.Context, db *sql.DB, subject *api.Account) dummyAccount {
+func createAccount(ctx context.Context, t *testing.T, db *sql.DB, subject *api.Account) dummyAccount {
 	t.Helper()
 
-	var accountId string
+	var accountID string
 	err := db.QueryRowContext(ctx, `
 		INSERT INTO accounts (user_id, currency, balance)
-		VALUES ($1, $2, $3) RETURNING id`, subject.AccountId, subject.Currency, subject.Balance).Scan(&accountId)
+		VALUES ($1, $2, $3) RETURNING id`, subject.AccountID, subject.Currency, subject.Balance).Scan(&accountID)
 	require.NoError(t, err)
-	require.NotEmpty(t, accountId)
+	require.NotEmpty(t, accountID)
 
 	return dummyAccount{
-		accountId: accountId,
-		userId:    subject.AccountId,
+		accountID: accountID,
+		userID:    subject.AccountID,
 	}
 }
 
-func createAccounts(t *testing.T, ctx context.Context, db *sql.DB, count int) []dummyAccount {
+func createAccounts(ctx context.Context, t *testing.T, db *sql.DB, count int) []dummyAccount {
 	t.Helper()
 
 	dummyAccounts := make([]dummyAccount, count)
-	for i := 0; i < count; i++ {
-		dummyAccounts[i] = createAccount(t, ctx, db, &api.Account{
-			AccountId: "account_" + strconv.Itoa(i),
+	for i := range count {
+		dummyAccounts[i] = createAccount(ctx, t, db, &api.Account{
+			AccountID: "account_" + strconv.Itoa(i),
 			Currency:  "USD",
 			Balance:   decimal.NewFromInt(0),
 		})
@@ -74,27 +75,27 @@ func createAccounts(t *testing.T, ctx context.Context, db *sql.DB, count int) []
 	return dummyAccounts
 }
 
-func createTransaction(t *testing.T, ctx context.Context, db *sql.DB, accountId string, subject *api.Transaction) dummyTransaction {
+func createTransaction(ctx context.Context, t *testing.T, db *sql.DB, accountID string, subject *api.Transaction) dummyTransaction {
 	t.Helper()
 
-	var transactionId string
+	var transactionID string
 	err := db.QueryRowContext(ctx, `
 		INSERT INTO transactions (account_id, amount, group_id, description, debit_credit)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		accountId, subject.Amount, subject.Remarks, subject.Remarks, subject.Type).Scan(&transactionId)
+		accountID, subject.Amount, subject.Remarks, subject.Remarks, subject.Type).Scan(&transactionID)
 	require.NoError(t, err)
 
-	return dummyTransaction{transactionId: transactionId}
+	return dummyTransaction{transactionID: transactionID}
 }
 
-func createTransactions(t *testing.T, ctx context.Context, db *sql.DB, dummyAccounts []dummyAccount) []dummyTransaction {
+func createTransactions(ctx context.Context, t *testing.T, db *sql.DB, dummyAccounts []dummyAccount) []dummyTransaction {
 	t.Helper()
 
 	dummyTransactions := make([]dummyTransaction, len(dummyAccounts))
 
 	for i, dummyAccount := range dummyAccounts {
-		dummyTransactions[i] = createTransaction(t, ctx, db, dummyAccount.accountId, &api.Transaction{
-			AccountId: dummyAccount.accountId,
+		dummyTransactions[i] = createTransaction(ctx, t, db, dummyAccount.accountID, &api.Transaction{
+			AccountID: dummyAccount.accountID,
 			Amount:    decimal.NewFromFloat(50.00),
 			Remarks:   "CreateTransactions",
 			Type:      api.CREDIT,
@@ -104,14 +105,14 @@ func createTransactions(t *testing.T, ctx context.Context, db *sql.DB, dummyAcco
 	return dummyTransactions
 }
 
-func createAccountTransactions(t *testing.T, ctx context.Context, db *sql.DB, dbAccountId string, account *api.Account, count int) []dummyTransaction {
+func createAccountTransactions(ctx context.Context, t *testing.T, db *sql.DB, dbAccountID string, account *api.Account, count int) []dummyTransaction {
 	t.Helper()
 
 	dummyTransactions := make([]dummyTransaction, count)
 
-	for i := 0; i < count; i++ {
-		dummyTransactions[i] = createTransaction(t, ctx, db, dbAccountId, &api.Transaction{
-			AccountId: account.AccountId,
+	for i := range count {
+		dummyTransactions[i] = createTransaction(ctx, t, db, dbAccountID, &api.Transaction{
+			AccountID: account.AccountID,
 			Amount:    decimal.NewFromFloat(50.00),
 			Remarks:   "CreateAccountTransactions" + strconv.Itoa(i),
 			Type:      api.CREDIT,
@@ -144,24 +145,24 @@ func TestGetAccountBalance(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
+
 		var err error
 
 		setCleanUp(t, db)
 
 		subject := &api.Account{
-			AccountId: "GetAccountBalance_user1",
+			AccountID: "GetAccountBalance_user1",
 			Currency:  "USD",
 			Balance:   decimal.NewFromFloat(100.00),
 		}
 
-		_ = createAccount(t, ctx, db, subject)
-		// defer dummyAccount.cleanFunc()
+		_ = createAccount(ctx, t, db, subject)
 
-		account, err := repo.GetAccountBalance(ctx, subject.Currency, subject.AccountId)
+		account, err := repo.GetAccountBalance(ctx, subject.Currency, subject.AccountID)
 		require.NoError(t, err)
 		require.NotNil(t, account)
 		require.Equal(t, subject.Currency, account.Currency)
-		require.Equal(t, subject.AccountId, account.AccountId)
+		require.Equal(t, subject.AccountID, account.AccountID)
 		require.True(t, account.Balance.Equal(decimal.NewFromFloat(100.00)))
 	})
 }
@@ -173,20 +174,21 @@ func TestGetTransaction(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
+
 		var err error
 
 		setCleanUp(t, db)
 
-		dummyAccounts := createAccounts(t, ctx, db, 5)
-		dummyTransactions := createTransactions(t, ctx, db, dummyAccounts)
+		dummyAccounts := createAccounts(ctx, t, db, 5)
+		dummyTransactions := createTransactions(ctx, t, db, dummyAccounts)
 
-		tx, err := repo.GetTransaction(ctx, dummyTransactions[0].transactionId)
+		tx, err := repo.GetTransaction(ctx, dummyTransactions[0].transactionID)
 		require.NoError(t, err)
 		require.NotNil(t, tx)
 
 		require.NotEmpty(t, tx.TxID)
-		require.Equal(t, dummyTransactions[0].transactionId, tx.TxID)
-		require.Equal(t, dummyAccounts[0].userId, tx.AccountId)
+		require.Equal(t, dummyTransactions[0].transactionID, tx.TxID)
+		require.Equal(t, dummyAccounts[0].userID, tx.AccountID)
 		require.Equal(t, "USD", tx.Currency)
 		require.True(t, tx.Amount.Equal(decimal.NewFromFloat(50.00)))
 	})
@@ -199,32 +201,32 @@ func TestGetTransactions(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		ctx := context.Background()
+
 		var err error
 
 		setCleanUp(t, db)
 
 		subject := &api.Account{
-			AccountId: "user1",
+			AccountID: "user1",
 			Currency:  "USD",
 			Balance:   decimal.NewFromInt(0),
 		}
 
-		dbAccountId := createAccount(t, ctx, db, subject)
-		_ = createAccountTransactions(t, ctx, db, dbAccountId.accountId, subject, 5)
+		dbAccountID := createAccount(ctx, t, db, subject)
+		_ = createAccountTransactions(ctx, t, db, dbAccountID.accountID, subject, 5)
 
-		txs, err := repo.GetTransactions(ctx, subject.Currency, subject.AccountId)
+		txs, err := repo.GetTransactions(ctx, subject.Currency, subject.AccountID)
 		require.NoError(t, err)
 		require.NotEmpty(t, txs)
 		require.Len(t, txs, 5)
 
 		for _, tx := range txs {
 			require.Equal(t, "USD", tx.Currency)
-			require.Equal(t, "user1", tx.AccountId)
+			require.Equal(t, "user1", tx.AccountID)
 			require.NotEmpty(t, tx.TxID)
 			require.True(t, tx.Amount.Equal(decimal.NewFromFloat(50.00)))
 		}
 	})
-
 }
 
 func TestTransfer(t *testing.T) {
@@ -238,8 +240,8 @@ func TestTransfer(t *testing.T) {
 		setCleanUp(t, db)
 
 		request := &api.TransferRequest{
-			FromAccountId: api.COMPANY_ACCOUNT_ID,
-			ToAccountId:   "user2",
+			FromAccountID: api.CompanyAccountID,
+			ToAccountID:   "user2",
 			Currency:      "USD",
 			Amount:        decimal.NewFromFloat(100.00),
 			Remarks:       "TestTransfer",
@@ -261,8 +263,8 @@ func TestConcurrentTransfers(t *testing.T) {
 
 	// Setup initial balances
 	_, err := repo.Transfer(ctx, &api.TransferRequest{
-		FromAccountId: api.COMPANY_ACCOUNT_ID,
-		ToAccountId:   "user1",
+		FromAccountID: api.CompanyAccountID,
+		ToAccountID:   "user1",
 		Currency:      "USD",
 		Amount:        decimal.NewFromFloat(1000.00),
 		Remarks:       "TestConcurrentTransfers",
@@ -270,8 +272,8 @@ func TestConcurrentTransfers(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = repo.Transfer(ctx, &api.TransferRequest{
-		FromAccountId: api.COMPANY_ACCOUNT_ID,
-		ToAccountId:   "user2",
+		FromAccountID: api.CompanyAccountID,
+		ToAccountID:   "user2",
 		Currency:      "USD",
 		Amount:        decimal.NewFromFloat(1000.00),
 		Remarks:       "TestConcurrentTransfers",
@@ -283,21 +285,22 @@ func TestConcurrentTransfers(t *testing.T) {
 	transferAmount := decimal.NewFromFloat(10.00)
 
 	var wg sync.WaitGroup
+
 	wg.Add(concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		go func() {
 			defer wg.Done()
 
-			_, err := repo.Transfer(ctx, &api.TransferRequest{
-				FromAccountId: "user1",
-				ToAccountId:   "user2",
+			_, errTransfer := repo.Transfer(ctx, &api.TransferRequest{
+				FromAccountID: "user1",
+				ToAccountID:   "user2",
 				Currency:      "USD",
 				Amount:        transferAmount,
 				Remarks:       "TestConcurrentTransfers",
 			}, fmt.Sprintf("concurrent-transfer-%s", strconv.Itoa(i)))
 
-			require.NoError(t, err)
+			require.NoError(t, errTransfer)
 		}()
 	}
 

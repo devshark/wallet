@@ -23,6 +23,12 @@ const (
 	shutdownTimeout = 5 * time.Second
 	readTimeout     = 5 * time.Second
 	writeTimeout    = 10 * time.Second
+
+	cacheExpiry = 5 * time.Minute
+
+	maxIdleConns    = 5
+	connMaxLifetime = 60 * time.Minute
+	connMaxIdleTime = 10 * time.Minute
 )
 
 func main() {
@@ -44,9 +50,9 @@ func main() {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(60 * time.Minute)
-	db.SetConnMaxIdleTime(10 * time.Minute)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	if err = db.Ping(); err != nil {
 		logger.Fatalf("Failed to reach database: %v", err)
@@ -64,10 +70,10 @@ func main() {
 
 	redisClient := redis.NewClient(&config.redisOptions)
 
-	server := rest.NewRestApiServer(repo).
+	server := rest.NewAPIServer(repo).
 		WithCustomLogger(logger).
-		WithCacheMiddleware(redisClient, 5*time.Minute).
-		HttpServer(config.port, readTimeout, writeTimeout)
+		WithCacheMiddleware(redisClient, cacheExpiry).
+		HTTPServer(config.port, readTimeout, writeTimeout)
 
 	// subscribe for the shutdown signals
 	stop := make(chan os.Signal, 1)
@@ -99,16 +105,17 @@ func main() {
 	log.Print("Shutting down...")
 	// if Shutdown takes too long, cancel the context
 	ctx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
+		cancel()
 		log.Fatal("Shutdown", err)
 	}
 
+	cancel()
 	log.Print("Gracefully stopped.")
 }
 
-type DbConfig struct {
+type DBConfig struct {
 	Host     string
 	Port     string
 	User     string
@@ -118,14 +125,14 @@ type DbConfig struct {
 
 type Config struct {
 	port         int64
-	postgres     DbConfig
+	postgres     DBConfig
 	redisOptions redis.Options
 }
 
 func NewConfig() Config {
 	return Config{
-		port: env.GetEnvInt64("PORT", 8080),
-		postgres: DbConfig{
+		port: env.RequireEnvInt64("PORT"),
+		postgres: DBConfig{
 			Host:     env.RequireEnv("POSTGRES_HOST"),
 			Port:     env.RequireEnv("POSTGRES_PORT"),
 			User:     env.RequireEnv("POSTGRES_USER"),

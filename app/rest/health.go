@@ -2,7 +2,7 @@ package rest
 
 import "net/http"
 
-func (h *RestHandlers) HandleHealthCheck(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }

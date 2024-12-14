@@ -11,38 +11,45 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-type RestApiServer struct {
+const (
+	maxHeaderBytes = 1 << 20
+
+	// let's allocate 10 capacity just for demo's sake.
+	middlewaresInitialCapacity = 10
+)
+
+type APIServer struct {
 	repo        repository.Repository
 	middlewares []middlewares.Middleware
 	logger      *log.Logger
 }
 
-func NewRestApiServer(repo repository.Repository) *RestApiServer {
-	return &RestApiServer{
-		repo:   repo,
-		logger: log.Default(),
-		// let's allocate 10 capacity just for demo's sake.
-		middlewares: make([]middlewares.Middleware, 0, 10),
+func NewAPIServer(repo repository.Repository) *APIServer {
+	return &APIServer{
+		repo:        repo,
+		logger:      log.Default(),
+		middlewares: make([]middlewares.Middleware, 0, middlewaresInitialCapacity),
 	}
 }
 
-func (r *RestApiServer) WithCacheMiddleware(redisClient *redis.Client, redisExpiration time.Duration) *RestApiServer {
+func (r *APIServer) WithCacheMiddleware(redisClient *redis.Client, redisExpiration time.Duration) *APIServer {
 	// only caches GET requests
-	cacheMiddleware := middlewares.NewRedisCacheMiddleware(redisClient, time.Hour)
+	cacheMiddleware := middlewares.NewRedisCacheMiddleware(redisClient, redisExpiration)
 	r.middlewares = append(r.middlewares, cacheMiddleware)
 
 	return r
 }
 
-func (r *RestApiServer) WithCustomLogger(logger *log.Logger) *RestApiServer {
+func (r *APIServer) WithCustomLogger(logger *log.Logger) *APIServer {
 	r.logger = logger
+
 	return r
 }
 
-func (r *RestApiServer) HttpServer(port int64, httpReadTimeout, httpWriteTimeout time.Duration) *http.Server {
+func (r *APIServer) HTTPServer(port int64, httpReadTimeout, httpWriteTimeout time.Duration) *http.Server {
 	mux := http.NewServeMux()
 
-	handler := &RestHandlers{
+	handler := &Handlers{
 		repo:   r.repo,
 		logger: r.logger,
 	}
@@ -68,6 +75,6 @@ func (r *RestApiServer) HttpServer(port int64, httpReadTimeout, httpWriteTimeout
 		ReadTimeout:       httpReadTimeout,
 		WriteTimeout:      httpWriteTimeout,
 		ReadHeaderTimeout: 0,
-		MaxHeaderBytes:    1 << 20,
+		MaxHeaderBytes:    maxHeaderBytes,
 	}
 }

@@ -9,9 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMigrator(t *testing.T) {
@@ -36,7 +35,11 @@ func TestMigrator(t *testing.T) {
 
 		err = os.Chdir(migrationDir)
 		require.NoError(t, err)
-		defer os.Chdir(originalWd)
+
+		defer func() {
+			err = os.Chdir(originalWd)
+			require.NoError(t, err)
+		}()
 
 		// Create Migrator
 		migrator := NewMigrator(db, migrationDir)
@@ -70,7 +73,11 @@ func TestMigrator(t *testing.T) {
 
 		err = os.Chdir(migrationDir)
 		require.NoError(t, err)
-		defer os.Chdir(originalWd)
+
+		defer func() {
+			err = os.Chdir(originalWd)
+			require.NoError(t, err)
+		}()
 
 		// Create Migrator
 		migrator := NewMigrator(db, migrationDir)
@@ -101,7 +108,11 @@ func TestMigrator(t *testing.T) {
 
 		err = os.Chdir(migrationDir)
 		require.NoError(t, err)
-		defer os.Chdir(originalWd)
+
+		defer func() {
+			err = os.Chdir(originalWd)
+			require.NoError(t, err)
+		}()
 
 		// Create Migrator
 		migrator := NewMigrator(db, migrationDir)
@@ -130,7 +141,7 @@ func TestMigratorErrors(t *testing.T) {
 		// Create a migrator with an invalid pattern
 		invalidPath := string([]byte{0}) // null byte is invalid in file paths
 		migrator := NewMigrator(db, invalidPath)
-		migrator.globFunc = func(pattern string) ([]string, error) {
+		migrator.globFunc = func(_ string) ([]string, error) {
 			return nil, errors.New("syntax error in pattern")
 		}
 
@@ -153,7 +164,7 @@ func TestMigratorErrors(t *testing.T) {
 		require.NoError(t, err)
 
 		migrator := NewMigrator(db, noPermDir)
-		migrator.globFunc = func(pattern string) ([]string, error) {
+		migrator.globFunc = func(_ string) ([]string, error) {
 			return nil, errors.New("permission denied")
 		}
 
@@ -177,7 +188,11 @@ func TestMigratorErrors(t *testing.T) {
 
 		err = os.Chdir(migrationDir)
 		require.NoError(t, err)
-		defer os.Chdir(originalWd)
+
+		defer func() {
+			err = os.Chdir(originalWd)
+			require.NoError(t, err)
+		}()
 
 		migrator := NewMigrator(invalidDB, migrationDir)
 		err = migrator.Up(context.Background())
@@ -199,7 +214,11 @@ func TestMigratorErrors(t *testing.T) {
 
 		err = os.Chdir(migrationDir)
 		require.NoError(t, err)
-		defer os.Chdir(originalWd)
+
+		defer func() {
+			err = os.Chdir(originalWd)
+			require.NoError(t, err)
+		}()
 
 		migrator := NewMigrator(db, migrationDir)
 

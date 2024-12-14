@@ -13,6 +13,7 @@ func GetEnv(key, defaultValue string) string {
 	if !exists {
 		return defaultValue
 	}
+
 	return value
 }
 
@@ -21,10 +22,12 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	if !exists {
 		return defaultValue
 	}
+
 	parse, err := strconv.ParseBool(value)
 	if err != nil {
 		return defaultValue
 	}
+
 	return parse
 }
 
@@ -33,10 +36,12 @@ func GetEnvInt64(key string, defaultValue int64) int64 {
 	if !exists {
 		return defaultValue
 	}
+
 	parse, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return defaultValue
 	}
+
 	return parse
 }
 
@@ -45,10 +50,12 @@ func GetEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	if !exists {
 		return defaultValue
 	}
+
 	parse, err := time.ParseDuration(value)
 	if err != nil {
 		return defaultValue
 	}
+
 	return parse
 }
 
@@ -66,6 +73,7 @@ func RequireEnv(key string) string {
 	if !exists {
 		panic(fmt.Sprintf("required env variable %s not found", key))
 	}
+
 	return value
 }
 

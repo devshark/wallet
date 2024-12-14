@@ -6,13 +6,13 @@ import (
 	"github.com/devshark/wallet/app/internal/repository"
 )
 
-type RestHandlers struct {
+type Handlers struct {
 	repo   repository.Repository
 	logger *log.Logger
 }
 
-func NewRestHandlers(repo repository.Repository) *RestHandlers {
-	return &RestHandlers{
+func NewRestHandlers(repo repository.Repository) *Handlers {
+	return &Handlers{
 		repo:   repo,
 		logger: log.Default(),
 	}
